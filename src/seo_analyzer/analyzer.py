@@ -511,6 +511,8 @@ class SEOAnalyzer:
         print("\n--- COMPARACIÓN PERÍODOS ---")
         comp = self.compare_periods()
         for metric, vals in comp.items():
+            if metric in ('status', 'mensaje'):
+                continue
             print(f"{metric}: {vals['base']:.2f} -> {vals['actual']:.2f} ({vals['var_pct']:+.2f}%)")
         
         if self.config.grupos:
