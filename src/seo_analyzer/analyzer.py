@@ -4,6 +4,7 @@ SEOAnalyzer - Clase principal.
 from typing import Dict, List, Optional, Tuple, Union
 import polars as pl
 from pathlib import Path
+import re
 
 from .config import SEOConfig, RecoveryTargets, normalizar_texto
 from .utils import (
@@ -522,3 +523,528 @@ class SEOAnalyzer:
                 for grupo, vals in grupos['grupos'].items():
                     if isinstance(vals, dict) and 'clicks' in vals:
                         print(f"{grupo}: {vals['clicks']:,} clics, {vals['position']:.1f} posición")
+
+    def _subset_by_keywords(self, df: pl.DataFrame, keywords: List[str]) -> pl.DataFrame:
+        """Genera subconjunto filtrando por keywords."""
+        if df is None or df.is_empty() or not keywords:
+            return df.filter(pl.lit(False))
+        
+        col_query = self.config.columnas.get('query', 'query')
+        pattern = compile_pattern([normalizar_texto(kw) for kw in keywords])
+        
+        return df.filter(pl.col(col_query).str.contains(pattern))
+
+    def generate_subsets(self, df: pl.DataFrame) -> Dict[str, pl.DataFrame]:
+        """Genera subconjuntos por categorías.
+        
+        Args:
+            df: DataFrame a subdividir
+            
+        Returns:
+            Dict con subconjuntos: 'totales', 'branded', 'non_branded', 
+            y subconjuntos por cada grupo configurado
+        """
+        if df is None or df.is_empty():
+            return {
+                'totales': df.clone() if df is not None else pl.DataFrame(),
+                'branded': pl.DataFrame(),
+                'non_branded': pl.DataFrame(),
+            }
+        
+        col_query = self.config.columnas.get('query', 'query')
+        
+        subsets = {}
+        
+        subsets['totales'] = df
+        
+        if self.config.brand_keywords:
+            brand_pattern = compile_pattern([normalizar_texto(kw) for kw in self.config.brand_keywords])
+            branded = df.filter(pl.col(col_query).str.contains(brand_pattern))
+            non_branded = df.filter(~pl.col(col_query).str.contains(brand_pattern))
+        else:
+            branded = pl.DataFrame()
+            non_branded = df
+        
+        subsets['branded'] = branded
+        subsets['non_branded'] = non_branded
+        
+        if self.config.grupos:
+            for grupo in self.config.grupos.keys():
+                if 'grupo' in df.columns:
+                    df_grupo = df.filter(pl.col('grupo') == grupo)
+                else:
+                    df_grupo = pl.DataFrame()
+                subsets[f'solo {grupo}'] = df_grupo
+        
+        if self.config.kpi_keywords:
+            kpi_pattern = compile_pattern([normalizar_texto(kw) for kw in self.config.kpi_keywords])
+            subsets['kpi_keywords'] = df.filter(pl.col(col_query).str.contains(kpi_pattern))
+        
+        return subsets
+
+    def summarize_dataframes(self, dfs: Dict[str, pl.DataFrame]) -> pl.DataFrame:
+        """Resume DataFrames con métricas.
+        
+        Args:
+            dfs: Dict de {nombre: DataFrame}
+            
+        Returns:
+            DataFrame con columnas: data, clicks, impressions, ctr, 
+            posicion, share, posicion_mediana
+        """
+        if not dfs or 'totales' not in dfs:
+            return pl.DataFrame({
+                'data': [],
+                'clics': [],
+                'impresiones': [],
+                'ctr': [],
+                'posicion': [],
+                'share': [],
+                'posicion_mediana': []
+            })
+        
+        total_clicks = safe_sum(dfs.get('totales'), 'clicks', 0)
+        
+        rows = []
+        for name, d in dfs.items():
+            if d is None or d.is_empty():
+                rows.append({
+                    'data': name,
+                    'clics': 0,
+                    'impresiones': 0,
+                    'ctr': 0.0,
+                    'posicion': 0.0,
+                    'share': 0.0,
+                    'posicion_mediana': 0.0
+                })
+                continue
+            
+            clicks = safe_sum(d, 'clicks')
+            impressions = safe_sum(d, 'impressions')
+            
+            ctr_w = self._weighted_avg_ctr(d) if impressions else 0.0
+            pos_w = self._weighted_avg_position(d) if impressions else 0.0
+            pos_median = safe_mean(d, 'position', 0.0)
+            
+            rows.append({
+                'data': name,
+                'clics': clicks,
+                'impresiones': impressions,
+                'ctr': round(ctr_w, 2),
+                'posicion': round(pos_w, 1),
+                'share': round((clicks / total_clicks * 100) if total_clicks else 0, 2),
+                'posicion_mediana': round(pos_median, 1)
+            })
+        
+        return pl.DataFrame(rows)
+
+    def _weighted_avg_ctr(self, df: pl.DataFrame) -> float:
+        """Calcula CTR promedio ponderado por impresiones."""
+        if df is None or df.is_empty():
+            return 0.0
+        try:
+            impressions = df['impressions'].to_numpy()
+            ctr = df['ctr'].to_numpy()
+            total_imp = impressions.sum()
+            if total_imp == 0:
+                return 0.0
+            return (ctr * impressions).sum() / total_imp
+        except:
+            return safe_mean(df, 'ctr', 0.0)
+
+    def _weighted_avg_position(self, df: pl.DataFrame) -> float:
+        """Calcula posición promedio ponderada por impresiones."""
+        if df is None or df.is_empty():
+            return 0.0
+        try:
+            impressions = df['impressions'].to_numpy()
+            position = df['position'].to_numpy()
+            total_imp = impressions.sum()
+            if total_imp == 0:
+                return 0.0
+            return (position * impressions).sum() / total_imp
+        except:
+            return safe_mean(df, 'position', 0.0)
+
+    def compare_summaries(
+        self,
+        df_inicio: pl.DataFrame,
+        df_fin: pl.DataFrame,
+        metrics: Tuple[str, ...] = ('clics', 'impresiones', 'ctr', 'posicion', 'share')
+    ) -> pl.DataFrame:
+        """Compara resúmenes entre períodos.
+        
+        Args:
+            df_inicio: DataFrame de resumen del período inicio
+            df_fin: DataFrame de resumen del período fin
+            metrics: Métricas a comparar
+            
+        Returns:
+            DataFrame con variaciones absolutas y porcentuales
+        """
+        if df_inicio is None or df_inicio.is_empty():
+            df_inicio = pl.DataFrame({'data': [], 'clics': [], 'impresiones': []})
+        if df_fin is None or df_fin.is_empty():
+            df_fin = pl.DataFrame({'data': [], 'clics': [], 'impresiones': []})
+        
+        col_data = 'data'
+        
+        cmp = df_inicio.join(df_fin, on=col_data, how='full', suffix='_fin').fill_null(0)
+        
+        metric_cols = []
+        for m in metrics:
+            col_ini = m if m in cmp.columns else f'{m}_ini'
+            col_fin = f'{m}_fin' if f'{m}_fin' in cmp.columns else m
+            
+            if col_ini in cmp.columns and col_fin in cmp.columns:
+                cmp = cmp.with_columns([
+                    (pl.col(col_fin) - pl.col(col_ini)).alias(f'Variacion_{m}')
+                ])
+                
+                cmp = cmp.with_columns([
+                    pl.when(pl.col(col_ini) != 0)
+                    .then((pl.col(f'Variacion_{m}') / pl.col(col_ini)) * 100)
+                    .otherwise(0.0)
+                    .alias(f'Variacion_porcentual_{m}')
+                ])
+                
+                metric_cols.extend([col_ini, col_fin, f'Variacion_{m}', f'Variacion_porcentual_{m}'])
+        
+        rename_map = {}
+        for m in metrics:
+            col_ini = m if m in df_inicio.columns else m
+            col_fin = f'{m}_fin' if f'{m}_fin' in cmp.columns else m
+            if col_ini in cmp.columns:
+                rename_map[col_ini] = f'{m} INI'
+            if col_fin in cmp.columns:
+                rename_map[col_fin] = f'{m} FIN'
+        
+        if rename_map:
+            cmp = cmp.rename(rename_map)
+        
+        order_cols = [col_data]
+        for m in metrics:
+            for suffix in ('INI', 'FIN', ''):
+                col_name = f'{m} {suffix}' if suffix else m
+                if col_name in cmp.columns:
+                    order_cols.append(col_name)
+        
+        existing_cols = [c for c in order_cols if c in cmp.columns]
+        return cmp.select(existing_cols)
+
+    def create_comparison_df(
+        self,
+        df_curr: pl.DataFrame,
+        df_prev: pl.DataFrame,
+        labels: List[List[str]],
+        metric: str = 'clicks'
+    ) -> pl.DataFrame:
+        """Crea DataFrame comparativo por marca/grupo.
+        
+        Args:
+            df_curr: DataFrame período actual
+            df_prev: DataFrame período previo
+            labels: Lista de listas de keywords por grupo
+            metric: Métrica a comparar ('clicks' o 'impressions')
+            
+        Returns:
+            DataFrame comparativo con variaciones
+        """
+        if df_curr is None:
+            df_curr = pl.DataFrame()
+        if df_prev is None:
+            df_prev = pl.DataFrame()
+        
+        col_query = self.config.columnas.get('query', 'query')
+        
+        metric_curr = metric if metric in df_curr.columns else 'clicks'
+        metric_prev = metric if metric in df_prev.columns else 'clicks'
+        
+        tot_curr = safe_sum(df_curr, metric_curr, 0)
+        tot_prev = safe_sum(df_prev, metric_prev, 0)
+        
+        data = []
+        for label in labels:
+            if not label:
+                continue
+                
+            pattern = compile_pattern([normalizar_texto(kw) for kw in label])
+            
+            curr_val = 0
+            prev_val = 0
+            
+            if not df_curr.is_empty():
+                filtered_curr = df_curr.filter(pl.col(col_query).str.contains(pattern))
+                curr_val = safe_sum(filtered_curr, metric_curr, 0)
+            
+            if not df_prev.is_empty():
+                filtered_prev = df_prev.filter(pl.col(col_query).str.contains(pattern))
+                prev_val = safe_sum(filtered_prev, metric_prev, 0)
+            
+            var = curr_val - prev_val
+            var_pct = round((var / prev_val * 100), 2) if prev_val != 0 else 0.0
+            share_curr = round((curr_val / tot_curr * 100), 2) if tot_curr else 0.0
+            share_prev = round((prev_val / tot_prev * 100), 2) if tot_prev else 0.0
+            
+            data.append({
+                'Marca': ', '.join(label[:3]) + ('...' if len(label) > 3 else ''),
+                f'{metric.capitalize()} Periodo Actual': curr_val,
+                f'{metric.capitalize()} Periodo Previo': prev_val,
+                f'Variación {metric.capitalize()}': var,
+                f'Variación Porcentual {metric.capitalize()} (%)': var_pct,
+                f'Share {metric.capitalize()} Periodo Actual (%)': share_curr,
+                f'Share {metric.capitalize()} Periodo Previo (%)': share_prev,
+                f'Variación Share {metric.capitalize()}': round(share_curr - share_prev, 2)
+            })
+        
+        return pl.DataFrame(data)
+
+    def analyze_subdomains(
+        self,
+        df_prev: pl.DataFrame,
+        df_curr: pl.DataFrame,
+        subdomain_patterns: List[str]
+    ) -> Tuple[pl.DataFrame, pl.DataFrame]:
+        """Análisis por subdominios.
+        
+        Args:
+            df_prev: DataFrame período previo
+            df_curr: DataFrame período actual
+            subdomain_patterns: Lista de patrones de subdominios
+            
+        Returns:
+            Tuple de (DataFrame prev, DataFrame curr) con métricas por subdominio
+        """
+        if df_prev is None:
+            df_prev = pl.DataFrame()
+        if df_curr is None:
+            df_curr = pl.DataFrame()
+        
+        col_page = self.config.columnas.get('page', 'page')
+        
+        def get_subdomain_summary(df, patterns):
+            if df is None or df.is_empty():
+                return pl.DataFrame({'subdomain': [], 'clicks': [], 'impressions': []})
+            
+            rows = []
+            for pattern in patterns:
+                filtered = df.filter(pl.col(col_page).str.contains(pattern))
+                if not filtered.is_empty():
+                    rows.append({
+                        'subdomain': pattern,
+                        'clicks': safe_sum(filtered, 'clicks'),
+                        'impressions': safe_sum(filtered, 'impressions')
+                    })
+            
+            if not rows:
+                return pl.DataFrame({'subdomain': [], 'clicks': [], 'impressions': []})
+            
+            return pl.DataFrame(rows)
+        
+        prev_summary = get_subdomain_summary(df_prev, subdomain_patterns)
+        curr_summary = get_subdomain_summary(df_curr, subdomain_patterns)
+        
+        return prev_summary, curr_summary
+
+    def top_n_queries_by_variation(
+        self,
+        df_prev: pl.DataFrame,
+        df_curr: pl.DataFrame,
+        n: int = 10,
+        metric: str = 'clicks',
+        includes: Optional[List[str]] = None,
+        excludes: Optional[List[str]] = None,
+        exact_match: bool = False,
+        subdomain: Optional[str] = None
+    ) -> pl.DataFrame:
+        """Top queries con mayor variación entre períodos.
+        
+        Args:
+            df_prev: DataFrame período previo
+            df_curr: DataFrame período actual
+            n: Número de resultados
+            metric: Métrica ('clicks' o 'impressions')
+            includes: Filtrar solo queries que contengan estos términos
+            excludes: Excluir queries que contengan estos términos
+            exact_match: Usar match exacto para includes/excludes
+            subdomain: Filtrar por subdominio
+            
+        Returns:
+            DataFrame con query, grupo, metric_prev, metric_curr, diferencia, abs_diff
+        """
+        if metric not in ['clicks', 'impressions']:
+            raise ValueError("metric debe ser 'clicks' o 'impressions'")
+        
+        if df_prev is None:
+            df_prev = pl.DataFrame()
+        if df_curr is None:
+            df_curr = pl.DataFrame()
+        
+        col_query = self.config.columnas.get('query', 'query')
+        col_page = self.config.columnas.get('page', 'page')
+        
+        d1 = df_prev.clone()
+        d2 = df_curr.clone()
+        
+        if subdomain:
+            pattern = compile_pattern([subdomain]) if isinstance(subdomain, (list, tuple)) else re.escape(subdomain)
+            d1 = d1.filter(pl.col(col_page).str.contains(pattern))
+            d2 = d2.filter(pl.col(col_page).str.contains(pattern))
+        
+        def apply_filter(df, terms, include=True):
+            if not terms:
+                return df
+            if exact_match:
+                terms_lower = [t.lower() for t in (terms if isinstance(terms, list) else [terms])]
+                return df.filter(pl.col(col_query).str.to_lowercase().is_in(terms_lower))
+            else:
+                pattern = compile_pattern(terms if isinstance(terms, list) else [terms])
+                mask = df[col_query].str.contains(pattern)
+                return df.filter(mask if include else ~mask)
+        
+        if includes:
+            d1 = apply_filter(d1, includes, True)
+            d2 = apply_filter(d2, includes, True)
+        
+        if excludes:
+            d1 = apply_filter(d1, excludes, False)
+            d2 = apply_filter(d2, excludes, False)
+        
+        brand_col = 'grupo' if 'grupo' in d1.columns else 'matched_brand'
+        
+        a1 = d1.group_by([col_query, brand_col]).agg(
+            pl.col(metric).sum().alias(f'{metric}_prev')
+        ) if not d1.is_empty() else pl.DataFrame({
+            col_query: [], brand_col: [], f'{metric}_prev': []
+        }).with_columns([
+            pl.col(f'{metric}_prev').cast(pl.Int64)
+        ])
+        
+        a2 = d2.group_by([col_query, brand_col]).agg(
+            pl.col(metric).sum().alias(f'{metric}_curr')
+        ) if not d2.is_empty() else pl.DataFrame({
+            col_query: [], brand_col: [], f'{metric}_curr': []
+        }).with_columns([
+            pl.col(f'{metric}_curr').cast(pl.Int64)
+        ])
+        
+        if a1.is_empty() and a2.is_empty():
+            return pl.DataFrame({
+                'query': [],
+                'grupo': [],
+                f'{metric}_prev': [],
+                f'{metric}_curr': [],
+                'diferencia': [],
+                'abs_diff': []
+            })
+        
+        merged = a1.join(a2, on=[col_query, brand_col], how='full').fill_null(0)
+        
+        merged = merged.with_columns([
+            (pl.col(f'{metric}_curr') - pl.col(f'{metric}_prev')).alias('diferencia'),
+            (pl.col(f'{metric}_curr') - pl.col(f'{metric}_prev')).abs().alias('abs_diff')
+        ])
+        
+        result = merged.sort('abs_diff', descending=True).head(n)
+        
+        return result.rename({brand_col: 'grupo'}).select([
+            col_query, 'grupo', f'{metric}_prev', f'{metric}_curr', 'diferencia', 'abs_diff'
+        ])
+
+    def traffic_distribution_by_keyword_category(self, df: Optional[pl.DataFrame] = None) -> pl.DataFrame:
+        """Distribución del tráfico por categoría de keyword.
+        
+        Args:
+            df: DataFrame opcional. Si es None, usa el DataFrame completo.
+            
+        Returns:
+            DataFrame con keyword_category, clicks, impressions
+        """
+        if df is None:
+            df = self.df
+        
+        if df is None or df.is_empty():
+            return pl.DataFrame({
+                'keyword_category': [],
+                'clicks': [],
+                'impressions': []
+            })
+        
+        if 'grupo' not in df.columns:
+            df = df.with_columns([pl.lit('no_grupo').alias('grupo')])
+        
+        if 'es_brand' not in df.columns:
+            df = df.with_columns([pl.lit(False).alias('es_brand')])
+        
+        summary = df.group_by('grupo').agg(
+            pl.col('clicks').sum().alias('clicks'),
+            pl.col('impressions').sum().alias('impressions')
+        ).rename({'grupo': 'keyword_category'})
+        
+        brand_clicks = safe_sum(df.filter(pl.col('es_brand') == True), 'clicks', 0)
+        brand_impr = safe_sum(df.filter(pl.col('es_brand') == True), 'impressions', 0)
+        
+        if brand_clicks > 0:
+            brand_row = pl.DataFrame({
+                'keyword_category': ['branded'],
+                'clicks': [brand_clicks],
+                'impressions': [brand_impr]
+            })
+            summary = pl.concat([summary, brand_row])
+        
+        return summary.sort('clicks', descending=True)
+
+    def traffic_distribution_by_subdomain(self, df: Optional[pl.DataFrame] = None) -> pl.DataFrame:
+        """Distribución del tráfico por subdominio.
+        
+        Args:
+            df: DataFrame opcional. Si es None, usa el DataFrame completo.
+            
+        Returns:
+            DataFrame con subdomain, clicks, impressions
+        """
+        if df is None:
+            df = self.df
+        
+        if df is None or df.is_empty():
+            return pl.DataFrame({
+                'subdomain': [],
+                'clicks': [],
+                'impressions': []
+            })
+        
+        col_page = self.config.columnas.get('page', 'page')
+        
+        df_with_subdomain = df.with_columns([
+            self._extract_hostname(pl.col(col_page)).alias('subdomain')
+        ]).filter(pl.col('subdomain').is_not_null())
+        
+        if df_with_subdomain.is_empty():
+            return pl.DataFrame({
+                'subdomain': [],
+                'clicks': [],
+                'impressions': []
+            })
+        
+        summary = df_with_subdomain.group_by('subdomain').agg(
+            pl.col('clicks').sum().alias('clicks'),
+            pl.col('impressions').sum().alias('impressions')
+        ).sort('clicks', descending=True)
+        
+        return summary
+
+    def _extract_hostname(self, url_series) -> pl.Series:
+        """Extrae hostname de URLs."""
+        def get_hostname(url):
+            if not url:
+                return None
+            try:
+                if '://' in url:
+                    host = url.split('://')[1].split('/')[0]
+                else:
+                    host = url.split('/')[0]
+                return host
+            except:
+                return None
+        
+        return url_series.map_elements(get_hostname, return_dtype=pl.Utf8)

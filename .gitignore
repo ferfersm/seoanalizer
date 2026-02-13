@@ -54,10 +54,13 @@ santa-maria/
 
 # Documentación interna y tests
 init-context.md
-skill.md
 doc.md
 context.md
 next-steps.md
+TrafficAnalyzer*.md
+*.md
+!README.md
+!skill.md
 test_local.py
 test_santa_maria.py
 test_empty.py
