@@ -518,5 +518,7 @@ class SEOAnalyzer:
         if self.config.grupos:
             print("\n--- GRUPOS ---")
             grupos = self.analyze_grupos('actual')
-            for grupo, vals in grupos.items():
-                print(f"{grupo}: {vals['clicks']:,} clics, {vals['position']:.1f} posición")
+            if 'grupos' in grupos:
+                for grupo, vals in grupos['grupos'].items():
+                    if isinstance(vals, dict) and 'clicks' in vals:
+                        print(f"{grupo}: {vals['clicks']:,} clics, {vals['position']:.1f} posición")
