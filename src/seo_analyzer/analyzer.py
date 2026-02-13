@@ -217,6 +217,30 @@ class SEOAnalyzer:
         
         return result.sort('sum_clicks', descending=True)
     
+    def get_top10_queries(self, periodo: str = 'actual') -> pl.DataFrame:
+        """Retorna queries con position <= 10.
+        
+        Args:
+            periodo: 'base' o 'actual'
+            
+        Returns:
+            DataFrame con columns: query, clicks, impressions, ctr, position
+        """
+        df = self.get_periodo(periodo)
+        
+        col_query = self.config.columnas.get('query', 'query')
+        
+        df_filtered = df.filter(pl.col('position') <= 10)
+        
+        result = df_filtered.group_by(col_query).agg([
+            pl.col('clicks').sum().alias('clicks'),
+            pl.col('impressions').sum().alias('impressions'),
+            pl.col('ctr').mean().alias('ctr'),
+            pl.col('position').mean().alias('position')
+        ])
+        
+        return result.sort('clicks', descending=True)
+    
     def analyze_urls(self, periodo: str = 'actual') -> pl.DataFrame:
         """Análisis por URLs/pages."""
         df = self.get_periodo(periodo)
@@ -938,7 +962,12 @@ class SEOAnalyzer:
                 'abs_diff': []
             })
         
-        merged = a1.join(a2, on=[col_query, brand_col], how='full').fill_null(0)
+        merged = a1.join(a2, on=[col_query, brand_col], how='full')
+        merged = merged.with_columns([
+            pl.col(f'{metric}_prev').fill_null(0),
+            pl.col(f'{metric}_curr').fill_null(0),
+            pl.col(brand_col).fill_null("sin_categoria")
+        ])
         
         merged = merged.with_columns([
             (pl.col(f'{metric}_curr') - pl.col(f'{metric}_prev')).alias('diferencia'),
@@ -979,7 +1008,9 @@ class SEOAnalyzer:
         summary = df.group_by('grupo').agg(
             pl.col('clicks').sum().alias('clicks'),
             pl.col('impressions').sum().alias('impressions')
-        ).rename({'grupo': 'keyword_category'})
+        ).rename({'grupo': 'keyword_category'}).with_columns(
+            pl.col('keyword_category').fill_null("sin_categoria")
+        )
         
         brand_clicks = safe_sum(df.filter(pl.col('es_brand') == True), 'clicks', 0)
         brand_impr = safe_sum(df.filter(pl.col('es_brand') == True), 'impressions', 0)

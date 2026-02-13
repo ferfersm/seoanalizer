@@ -62,6 +62,7 @@ TrafficAnalyzer*.md
 !README.md
 !skill.md
 test_local.py
+test_new_methods.py
 test_santa_maria.py
 test_empty.py
 test_full.py
