@@ -202,7 +202,12 @@ class RecoveryAnalyzer:
         }
     
     def calculate_top10_coverage(self) -> Dict:
-        """Calcula % de keywords en top 10."""
+        """Calcula % de keywords en top 10.
+        
+        Returns:
+            Dict con total_queries, top10_queries, coverage_pct, target, status,
+            y top10_df (DataFrame con queries y URLs en top 10)
+        """
         if not self.config.periodo_actual:
             raise ValueError("Período actual no configurado")
         
@@ -211,6 +216,22 @@ class RecoveryAnalyzer:
             self.config.periodo_actual[0],
             self.config.periodo_actual[1]
         )
+        
+        if df_actual.is_empty():
+            return {
+                'total_queries': 0,
+                'top10_queries': 0,
+                'coverage_pct': 0.0,
+                'target': self.targets.target_top10_coverage,
+                'status': 'no_data',
+                'top10_df': pl.DataFrame({
+                    'query': [],
+                    'page': [],
+                    'clicks': [],
+                    'impressions': [],
+                    'position': []
+                })
+            }
         
         total_queries = df_actual.select(pl.col('query').n_unique()).to_numpy().item()
         
@@ -219,16 +240,28 @@ class RecoveryAnalyzer:
         
         coverage_pct = (top10_queries / total_queries * 100) if total_queries > 0 else 0
         
+        top10_df = top10.group_by(['query', 'page']).agg([
+            pl.col('clicks').sum().alias('clicks'),
+            pl.col('impressions').sum().alias('impressions'),
+            pl.col('position').mean().alias('position')
+        ]).sort('clicks', descending=True)
+        
         return {
             'total_queries': total_queries,
             'top10_queries': top10_queries,
             'coverage_pct': round(coverage_pct, 2),
             'target': self.targets.target_top10_coverage,
-            'status': 'ok' if coverage_pct >= self.targets.target_top10_coverage else 'below_target'
+            'status': 'ok' if coverage_pct >= self.targets.target_top10_coverage else 'below_target',
+            'top10_df': top10_df
         }
     
     def detect_cannibalization(self) -> Dict:
-        """Detecta canibalización de keywords."""
+        """Detecta canibalización de keywords.
+        
+        Returns:
+            Dict con cannibalized_queries, total_queries, cannibalization_rate,
+            target, status, y cannibal_df (DataFrame con queries canibalizadas y URLs)
+        """
         if not self.config.periodo_actual:
             raise ValueError("Período actual no configurado")
         
@@ -238,13 +271,44 @@ class RecoveryAnalyzer:
             self.config.periodo_actual[1]
         )
         
+        if df_actual.is_empty():
+            return {
+                'cannibalized_queries': 0,
+                'total_queries': 0,
+                'cannibalization_rate': 0.0,
+                'target': self.targets.target_cannibalization,
+                'status': 'no_data',
+                'cannibal_df': pl.DataFrame({
+                    'query': [],
+                    'url_count': [],
+                    'total_clicks': [],
+                    'urls': []
+                })
+            }
+        
         top20 = df_actual.filter(pl.col('position') <= 20)
+        
+        if top20.is_empty():
+            return {
+                'cannibalized_queries': 0,
+                'total_queries': df_actual.select(pl.col('query').n_unique()).to_numpy().item(),
+                'cannibalization_rate': 0.0,
+                'target': self.targets.target_cannibalization,
+                'status': 'no_data',
+                'cannibal_df': pl.DataFrame({
+                    'query': [],
+                    'url_count': [],
+                    'total_clicks': [],
+                    'urls': []
+                })
+            }
         
         cannibal = (
             top20.group_by('query')
             .agg([
                 pl.col('page').n_unique().alias('url_count'),
-                pl.col('clicks').sum().alias('total_clicks')
+                pl.col('clicks').sum().alias('total_clicks'),
+                pl.col('page').str.concat('|').alias('urls')
             ])
             .filter(pl.col('url_count') > 1)
         )
@@ -254,19 +318,17 @@ class RecoveryAnalyzer:
         
         rate = (cannibal_count / total_queries * 100) if total_queries > 0 else 0
         
-        top_cannibal = (
-            cannibal.sort('url_count', descending=True)
-            .head(10)
-            .to_dicts()
-        )
+        cannibal_df = cannibal.sort('total_clicks', descending=True)
+        
+        status = 'ok' if rate <= self.targets.target_cannibalization else 'critical'
         
         return {
             'cannibalized_queries': cannibal_count,
             'total_queries': total_queries,
             'cannibalization_rate': round(rate, 2),
             'target': self.targets.target_cannibalization,
-            'status': 'ok' if rate <= self.targets.target_cannibalization else 'critical',
-            'top_cannibalized': top_cannibal
+            'status': status,
+            'cannibal_df': cannibal_df
         }
     
     def analyze(self) -> Dict:

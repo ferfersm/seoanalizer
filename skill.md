@@ -94,5 +94,5 @@ analyzer.print_summary()
 | `calculate_transactional_impressions()` | Impresiones transaccionales |
 | `calculate_nonbranded_coverage()` | Cobertura non-branded |
 | `calculate_url_optimization()` | Optimización URLs |
-| `calculate_top10_coverage()` | % keywords en top 10 |
-| `detect_cannibalization()` | Detecta canibalización |
+| `calculate_top10_coverage()` | % keywords en top 10 + DataFrame con queries y URLs |
+| `detect_cannibalization()` | Detecta canibalización + DataFrame con URLs |
