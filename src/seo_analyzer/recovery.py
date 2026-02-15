@@ -258,18 +258,23 @@ class RecoveryAnalyzer:
     def detect_cannibalization(
         self,
         max_queries: int = 100,
-        max_urls_per_query: int = 10
+        max_urls_per_query: int = 10,
+        sort_by: str = 'impressions'
     ) -> Dict:
         """Detecta canibalización de keywords.
         
         Args:
             max_queries: Número máximo de queries canibalizadas a retornar (default: 100)
             max_urls_per_query: Número máximo de URLs a mostrar por query (default: 10)
+            sort_by: Criterio de ordenamiento - 'impressions' (default) o 'clicks'
         
         Returns:
             Dict con cannibalized_queries, total_queries, cannibalization_rate,
             target, status, y cannibal_df (DataFrame con queries canibalizadas y URLs)
         """
+        if sort_by not in ['impressions', 'clicks']:
+            raise ValueError("sort_by debe ser 'impressions' o 'clicks'")
+        
         if not self.config.periodo_actual:
             raise ValueError("Período actual no configurado")
         
@@ -290,6 +295,7 @@ class RecoveryAnalyzer:
                     'query': [],
                     'url_count': [],
                     'total_clicks': [],
+                    'total_impressions': [],
                     'urls': []
                 })
             }
@@ -307,6 +313,7 @@ class RecoveryAnalyzer:
                     'query': [],
                     'url_count': [],
                     'total_clicks': [],
+                    'total_impressions': [],
                     'urls': []
                 })
             }
@@ -317,6 +324,7 @@ class RecoveryAnalyzer:
             .agg([
                 pl.col('page').n_unique().alias('url_count'),
                 pl.col('clicks').sum().alias('total_clicks'),
+                pl.col('impressions').sum().alias('total_impressions'),
                 pl.col('page').alias('all_urls')
             ])
             .filter(pl.col('url_count') > 1)
@@ -327,8 +335,9 @@ class RecoveryAnalyzer:
         
         rate = (cannibal_count / total_queries * 100) if total_queries > 0 else 0
         
-        # Ordenar por clicks y limitar número de queries
-        cannibal_df = cannibal.sort('total_clicks', descending=True).head(max_queries)
+        # Ordenar por el criterio especificado y limitar número de queries
+        sort_column = 'total_impressions' if sort_by == 'impressions' else 'total_clicks'
+        cannibal_df = cannibal.sort(sort_column, descending=True).head(max_queries)
         
         # Limitar URLs por query y unirlas
         def limit_urls(urls_list):
