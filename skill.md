@@ -5,7 +5,7 @@ license: MIT
 compatibility: Python 3.11+, polars
 metadata:
   author: SEO Technical Team
-  version: "1.2"
+  version: "1.3"
 ---
 
 # seo_analyzer Skill
@@ -95,4 +95,4 @@ analyzer.print_summary()
 | `calculate_nonbranded_coverage()` | Cobertura non-branded |
 | `calculate_url_optimization()` | Optimización URLs |
 | `calculate_top10_coverage()` | % keywords en top 10 + DataFrame con queries y URLs |
-| `detect_cannibalization()` | Detecta canibalización + DataFrame con URLs |
+| `detect_cannibalization(max_queries=100, max_urls_per_query=10)` | Detecta canibalización + DataFrame con URLs limitadas |

@@ -255,8 +255,16 @@ class RecoveryAnalyzer:
             'top10_df': top10_df
         }
     
-    def detect_cannibalization(self) -> Dict:
+    def detect_cannibalization(
+        self,
+        max_queries: int = 100,
+        max_urls_per_query: int = 10
+    ) -> Dict:
         """Detecta canibalización de keywords.
+        
+        Args:
+            max_queries: Número máximo de queries canibalizadas a retornar (default: 100)
+            max_urls_per_query: Número máximo de URLs a mostrar por query (default: 10)
         
         Returns:
             Dict con cannibalized_queries, total_queries, cannibalization_rate,
@@ -303,12 +311,13 @@ class RecoveryAnalyzer:
                 })
             }
         
+        # Agrupar por query y contar URLs únicas
         cannibal = (
             top20.group_by('query')
             .agg([
                 pl.col('page').n_unique().alias('url_count'),
                 pl.col('clicks').sum().alias('total_clicks'),
-                pl.col('page').str.concat('|').alias('urls')
+                pl.col('page').alias('all_urls')
             ])
             .filter(pl.col('url_count') > 1)
         )
@@ -318,7 +327,22 @@ class RecoveryAnalyzer:
         
         rate = (cannibal_count / total_queries * 100) if total_queries > 0 else 0
         
-        cannibal_df = cannibal.sort('total_clicks', descending=True)
+        # Ordenar por clicks y limitar número de queries
+        cannibal_df = cannibal.sort('total_clicks', descending=True).head(max_queries)
+        
+        # Limitar URLs por query y unirlas
+        def limit_urls(urls_list):
+            """Limita URLs a max_urls_per_query y une con |"""
+            unique_urls = list(dict.fromkeys(urls_list))[:max_urls_per_query]
+            return '|'.join(unique_urls)
+        
+        # Aplicar límite de URLs
+        urls_list = cannibal_df['all_urls'].to_list()
+        limited_urls = [limit_urls(urls) for urls in urls_list]
+        
+        cannibal_df = cannibal_df.with_columns([
+            pl.Series('urls', limited_urls)
+        ]).drop('all_urls')
         
         status = 'ok' if rate <= self.targets.target_cannibalization else 'critical'
         
