@@ -26,15 +26,21 @@ Usa este skill cuando:
 ## Prerequisites
 
 1. **Datos requeridos**: DataFrame de Polars con columnas:
-   - `query` - Palabras clave
-   - `page` - URL de la página
-   - `date` - Fecha
-   - `clicks` - Clics
-   - `impressions` - Impresiones
-   - `ctr` - CTR
-   - `position` - Posición
+   - `query` - Palabras clave (str)
+   - `page` - URL de la página (str)
+   - `date` - Fecha (datetime o str en formato ISO)
+   - `clicks` - Clics (int)
+   - `impressions` - Impresiones (int)
+   - `ctr` - CTR (float, entre 0 y 1, o 0-100)
+   - `position` - Posición (float)
 
-2. **Entorno**: Python 3.11+ con polars instalado
+2. **Tipos de datos**: El módulo automáticamente normaliza los tipos:
+   - `clicks` e `impressions` → Int64 (enteros)
+   - `ctr` y `position` → Float64 (2 decimales)
+   - `date` → Datetime (si viene como string)
+   - `query` → lowercase (minúsculas)
+
+3. **Entorno**: Python 3.11+ con polars instalado
 
 ## Quick Start
 
