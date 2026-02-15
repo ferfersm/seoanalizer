@@ -64,6 +64,11 @@ analyzer.print_summary()
 - "Períodos no configurados": Ejecutar `configure()` con `periodo_base` y `periodo_actual`
 - "No hay datos": Verificar formato de fechas (YYYY-MM-DD)
 
+## Notas de Formato
+
+- Todas las métricas de **CTR** y **position** se redondean automáticamente a **2 decimales**
+- Esto asegura consistencia en los outputs y facilita la exportación a Sheets
+
 ## Métodos Disponibles (v1.2)
 
 ### SEOAnalyzer
