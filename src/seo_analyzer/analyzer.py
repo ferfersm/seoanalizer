@@ -76,7 +76,7 @@ class SEOAnalyzer:
         return cls(df)
     
     def _preprocess(self):
-        """Preprocesa el DataFrame."""
+        """Preprocesa el DataFrame y asegura tipos de datos correctos."""
         if self.df.is_empty():
             return
         
@@ -92,6 +92,29 @@ class SEOAnalyzer:
         if col_query in self.df.columns:
             self.df = self.df.with_columns([
                 pl.col(col_query).str.to_lowercase().alias(col_query)
+            ])
+        
+        # Asegurar tipos de datos numéricos correctos
+        # clicks e impressions deben ser enteros
+        if 'clicks' in self.df.columns:
+            self.df = self.df.with_columns([
+                pl.col('clicks').cast(pl.Int64).alias('clicks')
+            ])
+        
+        if 'impressions' in self.df.columns:
+            self.df = self.df.with_columns([
+                pl.col('impressions').cast(pl.Int64).alias('impressions')
+            ])
+        
+        # ctr y position deben ser float
+        if 'ctr' in self.df.columns:
+            self.df = self.df.with_columns([
+                pl.col('ctr').cast(pl.Float64).alias('ctr')
+            ])
+        
+        if 'position' in self.df.columns:
+            self.df = self.df.with_columns([
+                pl.col('position').cast(pl.Float64).alias('position')
             ])
     
     def configure(
