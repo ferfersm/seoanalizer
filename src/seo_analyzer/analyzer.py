@@ -228,8 +228,8 @@ class SEOAnalyzer:
             pl.col('clicks').median().alias('median_clicks'),
             pl.col('clicks').std().alias('std_clicks'),
             pl.col('impressions').sum().alias('sum_impressions'),
-            pl.col('ctr').mean().alias('avg_ctr'),
-            pl.col('position').mean().alias('avg_position'),
+            pl.col('ctr').mean().round(2).alias('avg_ctr'),
+            pl.col('position').mean().round(2).alias('avg_position'),
             pl.col('position').median().alias('median_position'),
             pl.col('position').std().alias('std_position'),
             pl.col('clicks').count().alias('count')
@@ -267,8 +267,8 @@ class SEOAnalyzer:
         result = df_filtered.group_by(col_query).agg([
             pl.col('clicks').sum().alias('clicks'),
             pl.col('impressions').sum().alias('impressions'),
-            pl.col('ctr').mean().alias('ctr'),
-            pl.col('position').mean().alias('position')
+            pl.col('ctr').mean().round(2).alias('ctr'),
+            pl.col('position').mean().round(2).alias('position')
         ])
 
         # Para position, ordenar ascendente (menor = mejor)
@@ -305,8 +305,8 @@ class SEOAnalyzer:
             pl.col('clicks').sum().alias('sum_clicks'),
             pl.col('clicks').mean().alias('avg_clicks'),
             pl.col('impressions').sum().alias('sum_impressions'),
-            pl.col('ctr').mean().alias('avg_ctr'),
-            pl.col('position').mean().alias('avg_position'),
+            pl.col('ctr').mean().round(2).alias('avg_ctr'),
+            pl.col('position').mean().round(2).alias('avg_position'),
             pl.col('clicks').count().alias('count')
         ])
 
@@ -332,8 +332,8 @@ class SEOAnalyzer:
             'status': 'ok',
             'clicks': safe_sum(df, 'clicks'),
             'impressions': safe_sum(df, 'impressions'),
-            'ctr': safe_mean(df, 'ctr'),
-            'position': safe_mean(df, 'position'),
+            'ctr': round(safe_mean(df, 'ctr'), 2),
+            'position': round(safe_mean(df, 'position'), 2),
             'queries': safe_n_unique(df, 'query'),
             'pages': safe_n_unique(df, 'page')
         }
@@ -358,15 +358,15 @@ class SEOAnalyzer:
             'branded': {
                 'clicks': safe_sum(branded, 'clicks'),
                 'impressions': safe_sum(branded, 'impressions'),
-                'ctr': safe_mean(branded, 'ctr'),
-                'position': safe_mean(branded, 'position'),
+                'ctr': round(safe_mean(branded, 'ctr'), 2),
+                'position': round(safe_mean(branded, 'position'), 2),
                 'queries': safe_n_unique(branded, 'query')
             },
             'non_branded': {
                 'clicks': safe_sum(non_branded, 'clicks'),
                 'impressions': safe_sum(non_branded, 'impressions'),
-                'ctr': safe_mean(non_branded, 'ctr'),
-                'position': safe_mean(non_branded, 'position'),
+                'ctr': round(safe_mean(non_branded, 'ctr'), 2),
+                'position': round(safe_mean(non_branded, 'position'), 2),
                 'queries': safe_n_unique(non_branded, 'query')
             }
         }
@@ -393,8 +393,8 @@ class SEOAnalyzer:
             resultados['grupos'][grupo] = {
                 'clicks': safe_sum(df_grupo, 'clicks'),
                 'impressions': safe_sum(df_grupo, 'impressions'),
-                'ctr': safe_mean(df_grupo, 'ctr'),
-                'position': safe_mean(df_grupo, 'position'),
+                'ctr': round(safe_mean(df_grupo, 'ctr'), 2),
+                'position': round(safe_mean(df_grupo, 'position'), 2),
                 'queries': safe_n_unique(df_grupo, 'query')
             }
         
@@ -421,8 +421,8 @@ class SEOAnalyzer:
             'status': 'ok',
             'clicks': safe_sum(kpi_df, 'clicks'),
             'impressions': safe_sum(kpi_df, 'impressions'),
-            'ctr': safe_mean(kpi_df, 'ctr'),
-            'position': safe_mean(kpi_df, 'position'),
+            'ctr': round(safe_mean(kpi_df, 'ctr'), 2),
+            'position': round(safe_mean(kpi_df, 'position'), 2),
             'queries': safe_n_unique(kpi_df, 'query')
         }
     

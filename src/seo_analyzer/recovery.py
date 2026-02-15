@@ -257,7 +257,7 @@ class RecoveryAnalyzer:
         top10_by_query = top10.group_by('query').agg([
             pl.col('clicks').sum().alias('total_clicks'),
             pl.col('impressions').sum().alias('total_impressions'),
-            pl.col('position').mean().alias('avg_position'),
+            pl.col('position').mean().round(2).alias('avg_position'),
             pl.col('page').alias('all_urls')
         ])
         
@@ -363,7 +363,7 @@ class RecoveryAnalyzer:
                 pl.col('page').n_unique().alias('url_count'),
                 pl.col('clicks').sum().alias('total_clicks'),
                 pl.col('impressions').sum().alias('total_impressions'),
-                pl.col('position').mean().alias('avg_position'),
+                pl.col('position').mean().round(2).alias('avg_position'),
                 pl.col('page').alias('all_urls')
             ])
             .filter(pl.col('url_count') > 1)

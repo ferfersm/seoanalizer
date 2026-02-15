@@ -94,9 +94,9 @@ class ComparisonAnalyzer:
                     'var_pct': round(((imp2 - imp1) / imp1 * 100) if imp1 != 0 else 0, 2)
                 },
                 'position': {
-                    'periodo_1': round(pos1, 1),
-                    'periodo_2': round(pos2, 1),
-                    'var': round(pos2 - pos1, 1)
+                    'periodo_1': round(pos1, 2),
+                    'periodo_2': round(pos2, 2),
+                    'var': round(pos2 - pos1, 2)
                 }
             }
         

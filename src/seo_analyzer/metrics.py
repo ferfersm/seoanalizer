@@ -102,12 +102,12 @@ class MetricsCalculator:
             agg_exprs.append(pl.col('impressions').sum().alias('sum_impressions'))
 
         if 'ctr' in metrics:
-            agg_exprs.append(pl.col('ctr').mean().alias('avg_ctr'))
-
+            agg_exprs.append(pl.col('ctr').mean().round(2).alias('avg_ctr'))
+        
         if 'position' in metrics:
             agg_exprs.extend([
-                pl.col('position').mean().alias('avg_position'),
-                pl.col('position').median().alias('median_position'),
+                pl.col('position').mean().round(2).alias('avg_position'),
+                pl.col('position').median().round(2).alias('median_position'),
                 pl.col('position').std().alias('std_position')
             ])
 
@@ -147,10 +147,10 @@ class MetricsCalculator:
             result['sum_impressions'] = df.select(pl.col('impressions').sum()).to_numpy().item()
         
         if 'ctr' in metrics:
-            result['avg_ctr'] = df.select(pl.col('ctr').mean()).to_numpy().item()
+            result['avg_ctr'] = round(df.select(pl.col('ctr').mean()).to_numpy().item(), 2)
         
         if 'position' in metrics:
-            result['avg_position'] = df.select(pl.col('position').mean()).to_numpy().item()
+            result['avg_position'] = round(df.select(pl.col('position').mean()).to_numpy().item(), 2)
         
         return result
     
