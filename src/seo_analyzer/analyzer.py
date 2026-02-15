@@ -196,12 +196,32 @@ class SEOAnalyzer:
         else:
             raise ValueError(f"Período desconocido: {periodo}")
     
-    def analyze_queries(self, periodo: str = 'actual') -> pl.DataFrame:
-        """Análisis por queries."""
+    def analyze_queries(
+        self,
+        periodo: str = 'actual',
+        n: int = 100,
+        sort_by: str = 'sum_clicks'
+    ) -> pl.DataFrame:
+        """Análisis por queries.
+
+        Args:
+            periodo: 'base' o 'actual'
+            n: Número máximo de queries a retornar (default: 100)
+            sort_by: Métrica para ordenar - 'sum_clicks', 'avg_clicks', 'sum_impressions',
+                    'avg_ctr', 'avg_position' (default: 'sum_clicks')
+
+        Returns:
+            DataFrame con métricas agregadas por query
+        """
+        valid_metrics = ['sum_clicks', 'avg_clicks', 'median_clicks', 'sum_impressions',
+                        'avg_ctr', 'avg_position', 'median_position', 'count']
+        if sort_by not in valid_metrics:
+            raise ValueError(f"sort_by debe ser uno de: {', '.join(valid_metrics)}")
+
         df = self.get_periodo(periodo)
-        
+
         col_query = self.config.columnas.get('query', 'query')
-        
+
         result = df.group_by(col_query).agg([
             pl.col('clicks').sum().alias('sum_clicks'),
             pl.col('clicks').mean().alias('avg_clicks'),
@@ -214,39 +234,73 @@ class SEOAnalyzer:
             pl.col('position').std().alias('std_position'),
             pl.col('clicks').count().alias('count')
         ])
-        
-        return result.sort('sum_clicks', descending=True)
+
+        return result.sort(sort_by, descending=True).head(n)
     
-    def get_top10_queries(self, periodo: str = 'actual') -> pl.DataFrame:
+    def get_top10_queries(
+        self,
+        periodo: str = 'actual',
+        n: int = 100,
+        sort_by: str = 'clicks'
+    ) -> pl.DataFrame:
         """Retorna queries con position <= 10.
-        
+
         Args:
             periodo: 'base' o 'actual'
-            
+            n: Número máximo de queries a retornar (default: 100)
+            sort_by: Métrica para ordenar - 'clicks', 'impressions', 'ctr', 'position'
+                    (default: 'clicks')
+
         Returns:
             DataFrame con columns: query, clicks, impressions, ctr, position
         """
+        valid_metrics = ['clicks', 'impressions', 'ctr', 'position']
+        if sort_by not in valid_metrics:
+            raise ValueError(f"sort_by debe ser uno de: {', '.join(valid_metrics)}")
+
         df = self.get_periodo(periodo)
-        
+
         col_query = self.config.columnas.get('query', 'query')
-        
+
         df_filtered = df.filter(pl.col('position') <= 10)
-        
+
         result = df_filtered.group_by(col_query).agg([
             pl.col('clicks').sum().alias('clicks'),
             pl.col('impressions').sum().alias('impressions'),
             pl.col('ctr').mean().alias('ctr'),
             pl.col('position').mean().alias('position')
         ])
-        
-        return result.sort('clicks', descending=True)
+
+        # Para position, ordenar ascendente (menor = mejor)
+        descending = sort_by != 'position'
+        return result.sort(sort_by, descending=descending).head(n)
     
-    def analyze_urls(self, periodo: str = 'actual') -> pl.DataFrame:
-        """Análisis por URLs/pages."""
+    def analyze_urls(
+        self,
+        periodo: str = 'actual',
+        n: int = 100,
+        sort_by: str = 'sum_clicks'
+    ) -> pl.DataFrame:
+        """Análisis por URLs/pages.
+
+        Args:
+            periodo: 'base' o 'actual'
+            n: Número máximo de URLs a retornar (default: 100)
+            sort_by: Métrica para ordenar - 'sum_clicks', 'avg_clicks', 'sum_impressions',
+                    'avg_ctr', 'avg_position', 'count' (default: 'sum_clicks')
+
+        Returns:
+            DataFrame con métricas agregadas por URL
+        """
+        valid_metrics = ['sum_clicks', 'avg_clicks', 'sum_impressions',
+                        'avg_ctr', 'avg_position', 'count']
+        if sort_by not in valid_metrics:
+            raise ValueError(f"sort_by debe ser uno de: {', '.join(valid_metrics)}")
+
         df = self.get_periodo(periodo)
-        
+
         col_page = self.config.columnas.get('page', 'page')
-        
+
         result = df.group_by(col_page).agg([
             pl.col('clicks').sum().alias('sum_clicks'),
             pl.col('clicks').mean().alias('avg_clicks'),
@@ -255,8 +309,8 @@ class SEOAnalyzer:
             pl.col('position').mean().alias('avg_position'),
             pl.col('clicks').count().alias('count')
         ])
-        
-        return result.sort('sum_clicks', descending=True)
+
+        return result.sort(sort_by, descending=True).head(n)
     
     def analyze_totals(self, periodo: str = 'actual') -> Dict:
         """Análisis de totales."""

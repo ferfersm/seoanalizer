@@ -69,9 +69,9 @@ analyzer.print_summary()
 ### SEOAnalyzer
 | Método | Descripción |
 |--------|-------------|
-| `analyze_queries(periodo)` | Análisis agregado por query |
-| `get_top10_queries(periodo)` | Queries con position <= 10 |
-| `analyze_urls(periodo)` | Análisis agregado por URL |
+| `analyze_queries(periodo, n=100, sort_by='sum_clicks')` | Análisis agregado por query (limitado) |
+| `get_top10_queries(periodo, n=100, sort_by='clicks')` | Queries con position <= 10 (limitado) |
+| `analyze_urls(periodo, n=100, sort_by='sum_clicks')` | Análisis agregado por URL (limitado) |
 | `analyze_totals(periodo)` | Métricas totales del período |
 | `analyze_brand_vs_nonbrand(periodo)` | Brand vs non-branded |
 | `analyze_grupos(periodo)` | Análisis por grupos de keywords |

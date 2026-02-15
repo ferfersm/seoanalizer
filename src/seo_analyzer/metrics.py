@@ -67,24 +67,28 @@ class MetricsCalculator:
         df: DataFrame,
         group_by: str,
         metrics: List[str] = None,
-        weight_col: str = 'impressions'
+        weight_col: str = 'impressions',
+        n: Optional[int] = None,
+        sort_by: Optional[str] = None
     ) -> DataFrame:
         """Genera resumen con métricas avanzadas por grupo.
-        
+
         Args:
             df: DataFrame con datos
             group_by: Columna a agrupar (query, page, grupo, etc.)
             metrics: Lista de métricas a calcular (default: clicks, impressions, ctr, position)
             weight_col: Columna para ponderación
-        
+            n: Número máximo de filas a retornar (default: None = todas)
+            sort_by: Columna para ordenar (default: None = sin ordenar)
+
         Returns:
             DataFrame con métricas por grupo
         """
         if metrics is None:
             metrics = ['clicks', 'impressions', 'ctr', 'position']
-        
+
         agg_exprs = []
-        
+
         if 'clicks' in metrics:
             agg_exprs.extend([
                 pl.col('clicks').sum().alias('sum_clicks'),
@@ -93,22 +97,28 @@ class MetricsCalculator:
                 pl.col('clicks').std().alias('std_clicks'),
                 pl.col('clicks').count().alias('count_clicks')
             ])
-        
+
         if 'impressions' in metrics:
             agg_exprs.append(pl.col('impressions').sum().alias('sum_impressions'))
-        
+
         if 'ctr' in metrics:
             agg_exprs.append(pl.col('ctr').mean().alias('avg_ctr'))
-        
+
         if 'position' in metrics:
             agg_exprs.extend([
                 pl.col('position').mean().alias('avg_position'),
                 pl.col('position').median().alias('median_position'),
                 pl.col('position').std().alias('std_position')
             ])
-        
+
         result = df.group_by(group_by).agg(agg_exprs)
-        
+
+        if sort_by and sort_by in result.columns:
+            result = result.sort(sort_by, descending=True)
+
+        if n is not None and n > 0:
+            result = result.head(n)
+
         return result
     
     @staticmethod
@@ -149,41 +159,51 @@ class MetricsCalculator:
         df1: DataFrame,
         df2: DataFrame,
         group_by: str = 'query',
-        metrics: List[str] = None
+        metrics: List[str] = None,
+        n: Optional[int] = None,
+        sort_by: Optional[str] = None
     ) -> DataFrame:
         """Compara dos períodos y calcula variaciones.
-        
+
         Args:
             df1: DataFrame período 1
             df2: DataFrame período 2
             group_by: Columna a agrupar
             metrics: Métricas a comparar
-        
+            n: Número máximo de filas a retornar (default: None = todas)
+            sort_by: Columna para ordenar por variación absoluta (ej: 'clicks_var_abs')
+
         Returns:
             DataFrame con comparación
         """
         if metrics is None:
             metrics = ['clicks', 'impressions']
-        
+
         agg1 = df1.group_by(group_by).agg([
             pl.col(m).sum().alias(f'{m}_p1') for m in metrics
         ])
-        
+
         agg2 = df2.group_by(group_by).agg([
             pl.col(m).sum().alias(f'{m}_p2') for m in metrics
         ])
-        
+
         merged = agg1.join(agg2, on=group_by, how='full').fill_null(0)
-        
+
         for m in metrics:
             merged = merged.with_columns([
                 (pl.col(f'{m}_p2') - pl.col(f'{m}_p1')).alias(f'{m}_var_abs'),
                 (
-                    (pl.col(f'{m}_p2') - pl.col(f'{m}_p1')) / 
+                    (pl.col(f'{m}_p2') - pl.col(f'{m}_p1')) /
                     pl.col(f'{m}_p1').replace(0, 1).replace(0, 1) * 100
                 ).alias(f'{m}_var_pct')
             ])
-        
+
+        if sort_by and sort_by in merged.columns:
+            merged = merged.sort(sort_by, descending=True)
+
+        if n is not None and n > 0:
+            merged = merged.head(n)
+
         return merged
     
     @staticmethod
