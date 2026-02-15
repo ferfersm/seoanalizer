@@ -201,13 +201,26 @@ class RecoveryAnalyzer:
             'status': 'on_track' if progress_pct >= self.targets.target_optimizacion_urls else 'in_progress'
         }
     
-    def calculate_top10_coverage(self) -> Dict:
+    def calculate_top10_coverage(
+        self,
+        max_queries: int = 100,
+        max_urls_per_query: int = 10,
+        sort_by: str = 'clicks'
+    ) -> Dict:
         """Calcula % de keywords en top 10.
+        
+        Args:
+            max_queries: Número máximo de queries a retornar (default: 100)
+            max_urls_per_query: Número máximo de URLs a mostrar por query (default: 10)
+            sort_by: Criterio de ordenamiento - 'clicks' (default) o 'impressions'
         
         Returns:
             Dict con total_queries, top10_queries, coverage_pct, target, status,
-            y top10_df (DataFrame con queries y URLs en top 10)
+            y top10_df (DataFrame con queries y URLs en top 10, limitado por parámetros)
         """
+        if sort_by not in ['clicks', 'impressions']:
+            raise ValueError("sort_by debe ser 'clicks' o 'impressions'")
+        
         if not self.config.periodo_actual:
             raise ValueError("Período actual no configurado")
         
@@ -240,11 +253,34 @@ class RecoveryAnalyzer:
         
         coverage_pct = (top10_queries / total_queries * 100) if total_queries > 0 else 0
         
-        top10_df = top10.group_by(['query', 'page']).agg([
-            pl.col('clicks').sum().alias('clicks'),
-            pl.col('impressions').sum().alias('impressions'),
-            pl.col('position').mean().alias('position')
-        ]).sort('clicks', descending=True)
+        # Agrupar por query con métricas agregadas
+        top10_by_query = top10.group_by('query').agg([
+            pl.col('clicks').sum().alias('total_clicks'),
+            pl.col('impressions').sum().alias('total_impressions'),
+            pl.col('position').mean().alias('avg_position'),
+            pl.col('page').alias('all_urls')
+        ])
+        
+        # Ordenar por el criterio especificado
+        sort_column = 'total_clicks' if sort_by == 'clicks' else 'total_impressions'
+        top10_by_query = top10_by_query.sort(sort_column, descending=True).head(max_queries)
+        
+        # Limitar URLs por query
+        def limit_urls(urls_list):
+            """Limita URLs a max_urls_per_query y une con |"""
+            unique_urls = list(dict.fromkeys(urls_list))[:max_urls_per_query]
+            return '|'.join(unique_urls)
+        
+        urls_list = top10_by_query['all_urls'].to_list()
+        limited_urls = [limit_urls(urls) for urls in urls_list]
+        
+        top10_df = top10_by_query.with_columns([
+            pl.Series('urls', limited_urls)
+        ]).drop('all_urls').rename({
+            'total_clicks': 'clicks',
+            'total_impressions': 'impressions',
+            'avg_position': 'position'
+        })
         
         return {
             'total_queries': total_queries,
@@ -296,6 +332,7 @@ class RecoveryAnalyzer:
                     'url_count': [],
                     'total_clicks': [],
                     'total_impressions': [],
+                    'avg_position': [],
                     'urls': []
                 })
             }
@@ -314,6 +351,7 @@ class RecoveryAnalyzer:
                     'url_count': [],
                     'total_clicks': [],
                     'total_impressions': [],
+                    'avg_position': [],
                     'urls': []
                 })
             }
@@ -325,6 +363,7 @@ class RecoveryAnalyzer:
                 pl.col('page').n_unique().alias('url_count'),
                 pl.col('clicks').sum().alias('total_clicks'),
                 pl.col('impressions').sum().alias('total_impressions'),
+                pl.col('position').mean().alias('avg_position'),
                 pl.col('page').alias('all_urls')
             ])
             .filter(pl.col('url_count') > 1)

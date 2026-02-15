@@ -94,5 +94,5 @@ analyzer.print_summary()
 | `calculate_transactional_impressions()` | Impresiones transaccionales |
 | `calculate_nonbranded_coverage()` | Cobertura non-branded |
 | `calculate_url_optimization()` | Optimización URLs |
-| `calculate_top10_coverage()` | % keywords en top 10 + DataFrame con queries y URLs |
-| `detect_cannibalization(max_queries=100, max_urls_per_query=10, sort_by='impressions')` | Detecta canibalización + DataFrame ordenado por impressions/clicks |
+| `calculate_top10_coverage(max_queries=100, max_urls_per_query=10, sort_by='clicks')` | % keywords en top 10 + DataFrame limitado con queries, URLs y position |
+| `detect_cannibalization(max_queries=100, max_urls_per_query=10, sort_by='impressions')` | Detecta canibalización + DataFrame con position, ordenado por impressions/clicks |
