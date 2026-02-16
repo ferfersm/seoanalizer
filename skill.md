@@ -5,7 +5,7 @@ license: MIT
 compatibility: Python 3.11+, polars
 metadata:
   author: SEO Technical Team
-  version: "1.3"
+  version: "1.4.3"
 ---
 
 # seo_analyzer Skill
@@ -97,6 +97,12 @@ analyzer.print_summary()
 | `top_n_queries_by_variation(prev, curr, n, metric)` | Top queries con variación |
 | `traffic_distribution_by_keyword_category(df)` | Distribución por categoría |
 | `traffic_distribution_by_subdomain(df)` | Distribución por subdominio |
+| `resumen_kw(kw, periodo, col)` | Seguimiento temporal de keywords (v1.4.3) |
+
+### Funciones Utilitarias
+| Función | Descripción |
+|---------|-------------|
+| `mostrar_df(df, formato)` | Visualización/exportación de DataFrames (v1.4.3) |
 
 ### RecoveryAnalyzer
 | Método | Descripción |

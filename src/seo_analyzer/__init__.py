@@ -7,6 +7,7 @@ from .comparison import ComparisonAnalyzer
 from .recovery import RecoveryAnalyzer
 from .metrics import MetricsCalculator
 from .utils import (
+    mostrar_df,
     filter_by_date_range,
     classify_by_keywords,
     classify_brand,
@@ -15,7 +16,7 @@ from .utils import (
     parse_date
 )
 
-__version__ = '1.0.0'
+__version__ = '1.4.3'
 
 __all__ = [
     'SEOAnalyzer',
@@ -30,5 +31,6 @@ __all__ = [
     'classify_brand',
     'classify_kpi',
     'compile_pattern',
-    'parse_date'
+    'parse_date',
+    'mostrar_df'
 ]

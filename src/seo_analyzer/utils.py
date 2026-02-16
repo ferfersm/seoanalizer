@@ -210,3 +210,26 @@ def safe_value(df: pl.DataFrame, default: float = 0.0) -> float:
         return val if val is not None else default
     except:
         return default
+
+
+def mostrar_df(df: pl.DataFrame, formato: str = 'csv'):
+    """
+    Muestra un DataFrame según el formato especificado.
+    
+    Args:
+        df: DataFrame de Polars a mostrar
+        formato: 'csv' (default) para copiar a Sheets, 'display' para ver en Colab
+    
+    Ejemplo:
+        >>> mostrar_df(df)  # Muestra en formato CSV
+        >>> mostrar_df(df, formato='display')  # Muestra como tabla en Colab
+    """
+    if formato == 'csv':
+        print(df.write_csv())
+    else:
+        try:
+            from IPython.display import display
+            display(df)
+        except ImportError:
+            # Si no estamos en IPython/Jupyter, mostrar como CSV
+            print(df.write_csv())

@@ -245,18 +245,41 @@ class SEOAnalyzer:
 
         col_query = self.config.columnas.get('query', 'query')
 
+        # Si el DataFrame está vacío, retornar DataFrame con esquema correcto y valores 0
+        if df.is_empty():
+            return pl.DataFrame({
+                col_query: [],
+                'sum_clicks': [],
+                'avg_clicks': [],
+                'median_clicks': [],
+                'std_clicks': [],
+                'sum_impressions': [],
+                'avg_ctr': [],
+                'avg_position': [],
+                'median_position': [],
+                'std_position': [],
+                'count': []
+            })
+
         result = df.group_by(col_query).agg([
             pl.col('clicks').sum().alias('sum_clicks'),
             pl.col('clicks').mean().alias('avg_clicks'),
             pl.col('clicks').median().alias('median_clicks'),
             pl.col('clicks').std().alias('std_clicks'),
             pl.col('impressions').sum().alias('sum_impressions'),
-            pl.col('ctr').mean().round(2).alias('avg_ctr'),
-            pl.col('position').mean().round(2).alias('avg_position'),
+            # CTR ponderado por impresiones: (ctr * impressions) / sum(impressions)
+            ((pl.col('ctr') * pl.col('impressions')).sum() / pl.col('impressions').sum())
+            .fill_nan(0.0).round(2).alias('avg_ctr'),
+            # Position ponderado por impresiones: (position * impressions) / sum(impressions)
+            ((pl.col('position') * pl.col('impressions')).sum() / pl.col('impressions').sum())
+            .fill_nan(0.0).round(2).alias('avg_position'),
             pl.col('position').median().alias('median_position'),
             pl.col('position').std().alias('std_position'),
             pl.col('clicks').count().alias('count')
         ])
+
+        if result.is_empty():
+            return result
 
         return result.sort(sort_by, descending=True).head(n)
     
@@ -285,14 +308,31 @@ class SEOAnalyzer:
 
         col_query = self.config.columnas.get('query', 'query')
 
+        # Si el DataFrame está vacío, retornar DataFrame con esquema correcto y valores 0
+        if df.is_empty():
+            return pl.DataFrame({
+                col_query: [],
+                'clicks': [],
+                'impressions': [],
+                'ctr': [],
+                'position': []
+            })
+
         df_filtered = df.filter(pl.col('position') <= 10)
 
         result = df_filtered.group_by(col_query).agg([
             pl.col('clicks').sum().alias('clicks'),
             pl.col('impressions').sum().alias('impressions'),
-            pl.col('ctr').mean().round(2).alias('ctr'),
-            pl.col('position').mean().round(2).alias('position')
+            # CTR ponderado por impresiones
+            ((pl.col('ctr') * pl.col('impressions')).sum() / pl.col('impressions').sum())
+            .fill_nan(0.0).round(2).alias('ctr'),
+            # Position ponderado por impresiones
+            ((pl.col('position') * pl.col('impressions')).sum() / pl.col('impressions').sum())
+            .fill_nan(0.0).round(2).alias('position')
         ])
+
+        if result.is_empty():
+            return result
 
         # Para position, ordenar ascendente (menor = mejor)
         descending = sort_by != 'position'
@@ -324,14 +364,33 @@ class SEOAnalyzer:
 
         col_page = self.config.columnas.get('page', 'page')
 
+        # Si el DataFrame está vacío, retornar DataFrame con esquema correcto y valores 0
+        if df.is_empty():
+            return pl.DataFrame({
+                col_page: [],
+                'sum_clicks': [],
+                'avg_clicks': [],
+                'sum_impressions': [],
+                'avg_ctr': [],
+                'avg_position': [],
+                'count': []
+            })
+
         result = df.group_by(col_page).agg([
             pl.col('clicks').sum().alias('sum_clicks'),
             pl.col('clicks').mean().alias('avg_clicks'),
             pl.col('impressions').sum().alias('sum_impressions'),
-            pl.col('ctr').mean().round(2).alias('avg_ctr'),
-            pl.col('position').mean().round(2).alias('avg_position'),
+            # CTR ponderado por impresiones
+            ((pl.col('ctr') * pl.col('impressions')).sum() / pl.col('impressions').sum())
+            .fill_nan(0.0).round(2).alias('avg_ctr'),
+            # Position ponderado por impresiones
+            ((pl.col('position') * pl.col('impressions')).sum() / pl.col('impressions').sum())
+            .fill_nan(0.0).round(2).alias('avg_position'),
             pl.col('clicks').count().alias('count')
         ])
+
+        if result.is_empty():
+            return result
 
         return result.sort(sort_by, descending=True).head(n)
     
@@ -1156,3 +1215,112 @@ class SEOAnalyzer:
                 return None
         
         return url_series.map_elements(get_hostname, return_dtype=pl.Utf8)
+
+    def resumen_kw(
+        self,
+        kw: str | None = None,
+        col: str = 'query',
+        periodo: str = 'month',
+        rango: tuple = (None, None),
+        exact_match: bool = True
+    ) -> pl.DataFrame:
+        """
+        Resumen de métricas para una keyword (o para todo el df si kw=None).
+        
+        Args:
+            kw: Keyword a filtrar. Si None, usa todo el DataFrame.
+            col: Columna para filtrar ('query' o 'page')
+            periodo: 'month' o 'day' para agrupación temporal
+            rango: Tupla (fecha_inicio, fecha_fin) para completar rango
+            exact_match: True para match exacto, False para contains
+            
+        Returns:
+            DataFrame con métricas por período y variaciones
+        """
+        from typing import Literal
+        
+        if periodo not in ['month', 'day']:
+            raise ValueError("periodo debe ser 'month' o 'day'")
+        
+        # Obtener período actual (o usar todo el df si no hay período configurado)
+        if hasattr(self.config, 'periodo_actual') and self.config.periodo_actual:
+            df = self.get_periodo('actual')
+        else:
+            df = self.df
+        
+        # Si el DataFrame está vacío, retornar DataFrame vacío con esquema correcto
+        if df.is_empty():
+            return pl.DataFrame({
+                'period': [],
+                'clicks': [],
+                'impressions': [],
+                'ctr': [],
+                'avg_position': [],
+                'variacion_clicks': [],
+                'variacion_impressions': [],
+                'variacion_clicks_pct': [],
+                'variacion_impressions_pct': []
+            })
+        
+        # Filtrar por keyword si se especifica
+        if kw is not None:
+            col_name = self.config.columnas.get(col, col) if hasattr(self.config, 'columnas') else col
+            if exact_match:
+                df = df.filter(pl.col(col_name) == kw)
+            else:
+                df = df.filter(pl.col(col_name).str.contains(kw))
+        
+        # Crear columna de período
+        if periodo == 'month':
+            df = df.with_columns([
+                pl.col('date').dt.truncate('1mo').alias('period')
+            ])
+        else:  # day
+            df = df.with_columns([
+                pl.col('date').dt.truncate('1d').alias('period')
+            ])
+        
+        # Agrupar y calcular métricas
+        result = df.group_by('period').agg([
+            pl.col('clicks').sum().alias('clicks'),
+            pl.col('impressions').sum().alias('impressions'),
+            pl.col('position').mean().round(2).alias('avg_position')
+        ]).with_columns([
+            # CTR calculado correctamente: clicks / impressions
+            (pl.col('clicks') / pl.col('impressions')).fill_nan(0.0).round(2).alias('ctr')
+        ]).sort('period')
+        
+        # Completar rango si se especifica
+        start, end = rango
+        if (start or end) and not result.is_empty():
+            # Convertir a string para date_range
+            start_date = start if start else result['period'].min()
+            end_date = end if end else result['period'].max()
+            
+            # Crear rango completo de fechas
+            freq = '1mo' if periodo == 'month' else '1d'
+            all_periods = pl.date_range(
+                start=pl.lit(start_date).str.to_datetime(),
+                end=pl.lit(end_date).str.to_datetime(),
+                interval=freq,
+                eager=True
+            )
+            
+            # Join con rango completo para rellenar vacíos con 0
+            periods_df = pl.DataFrame({'period': all_periods})
+            result = periods_df.join(result, on='period', how='left').fill_null(0)
+            
+            # Recalcular CTR después de fill_null
+            result = result.with_columns([
+                (pl.col('clicks') / pl.col('impressions')).fill_nan(0.0).round(2).alias('ctr')
+            ])
+        
+        # Calcular variaciones
+        result = result.with_columns([
+            pl.col('clicks').diff().fill_null(0).cast(pl.Int64).alias('variacion_clicks'),
+            pl.col('impressions').diff().fill_null(0).cast(pl.Int64).alias('variacion_impressions'),
+            pl.col('clicks').pct_change().fill_null(0).round(2).alias('variacion_clicks_pct'),
+            pl.col('impressions').pct_change().fill_null(0).round(2).alias('variacion_impressions_pct')
+        ])
+        
+        return result

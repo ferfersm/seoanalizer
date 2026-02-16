@@ -261,6 +261,23 @@ class RecoveryAnalyzer:
             pl.col('page').alias('all_urls')
         ])
         
+        # Si no hay queries en top 10, retornar DataFrame vacío
+        if top10_by_query.is_empty():
+            return {
+                'total_queries': total_queries,
+                'top10_queries': 0,
+                'coverage_pct': 0.0,
+                'target': self.targets.target_top10_coverage,
+                'status': 'below_target',
+                'top10_df': pl.DataFrame({
+                    'query': [],
+                    'urls': [],
+                    'clicks': [],
+                    'impressions': [],
+                    'position': []
+                })
+            }
+        
         # Ordenar por el criterio especificado
         sort_column = 'total_clicks' if sort_by == 'clicks' else 'total_impressions'
         top10_by_query = top10_by_query.sort(sort_column, descending=True).head(max_queries)
@@ -373,6 +390,24 @@ class RecoveryAnalyzer:
         cannibal_count = cannibal.height
         
         rate = (cannibal_count / total_queries * 100) if total_queries > 0 else 0
+        
+        # Si no hay canibalización, retornar resultado vacío
+        if cannibal.is_empty():
+            return {
+                'cannibalized_queries': 0,
+                'total_queries': total_queries,
+                'cannibalization_rate': 0.0,
+                'target': self.targets.target_cannibalization,
+                'status': 'ok',
+                'cannibal_df': pl.DataFrame({
+                    'query': [],
+                    'url_count': [],
+                    'total_clicks': [],
+                    'total_impressions': [],
+                    'avg_position': [],
+                    'urls': []
+                })
+            }
         
         # Ordenar por el criterio especificado y limitar número de queries
         sort_column = 'total_impressions' if sort_by == 'impressions' else 'total_clicks'

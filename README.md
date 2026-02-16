@@ -167,7 +167,56 @@ recovery.analyze()
 
 MIT
 
+## Nuevas Funcionalidades v1.4.3
+
+### `mostrar_df()` - Visualización y Exportación
+Función utilitaria para mostrar DataFrames en formato CSV (para copiar a Sheets) o display (para Colab):
+
+```python
+from seo_analyzer import mostrar_df
+
+# Exportar a CSV para copiar a Sheets
+mostrar_df(df, formato='csv')
+
+# Mostrar como tabla en Colab/Jupyter
+mostrar_df(df, formato='display')
+```
+
+### `resumen_kw()` - Seguimiento Temporal de Keywords
+Método para analizar la evolución temporal de una keyword específica o de todo el tráfico:
+
+```python
+# Seguimiento de keyword específica por mes
+evolucion = analyzer.resumen_kw(kw='transbank', periodo='month')
+
+# Resumen de todo el tráfico (sin filtrar)
+resumen_total = analyzer.resumen_kw(kw=None, periodo='day')
+
+# Seguimiento por URL en lugar de query
+urls = analyzer.resumen_kw(col='page', kw='/login', periodo='month')
+```
+
+**Parámetros:**
+- `kw`: Keyword a filtrar (None = todo el DataFrame)
+- `col`: Columna para filtrar ('query' o 'page')
+- `periodo`: 'month' o 'day'
+- `exact_match`: True para match exacto, False para contains
+
+**Columnas del resultado:**
+- `period`: Período (mes o día)
+- `clicks`, `impressions`: Totales del período
+- `ctr`: Calculado como clicks/impressions (float, 2 decimales)
+- `avg_position`: Promedio de posiciones (float, 2 decimales)
+- `variacion_*`: Diferencias vs período anterior (absolutas y %)
+
 ## Changelog
+
+### v1.4.3
+- **Fix crítico**: Manejo de DataFrames vacíos en todos los métodos
+- **Fix**: CTR calculado correctamente como clicks/impressions
+- **Fix**: Position como promedio simple (no ponderado)
+- **Nuevo**: `mostrar_df()` para visualización/exportación
+- **Nuevo**: `resumen_kw()` para seguimiento temporal de keywords
 
 ### v1.4.2
 - Normalización automática de tipos de datos

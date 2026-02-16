@@ -151,6 +151,16 @@ class ComparisonAnalyzer:
         
         col_query = self.config.columnas.get('query', 'query')
         
+        # Si ambos DataFrames están vacíos, retornar DataFrame vacío con esquema correcto
+        if df1.is_empty() and df2.is_empty():
+            return pl.DataFrame({
+                col_query: [],
+                f'{metric}_p1': [],
+                f'{metric}_p2': [],
+                'variacion': [],
+                'variacion_abs': []
+            })
+        
         agg1 = df1.group_by(col_query).agg(
             pl.col(metric).sum().alias(f'{metric}_p1')
         )
@@ -165,6 +175,9 @@ class ComparisonAnalyzer:
             (pl.col(f'{metric}_p2') - pl.col(f'{metric}_p1')).alias('variacion'),
             (pl.col(f'{metric}_p2') - pl.col(f'{metric}_p1')).abs().alias('variacion_abs')
         ])
+        
+        if merged.is_empty():
+            return merged
         
         return merged.sort('variacion_abs', descending=True).head(n)
     

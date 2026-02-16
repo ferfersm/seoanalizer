@@ -87,6 +87,29 @@ class MetricsCalculator:
         if metrics is None:
             metrics = ['clicks', 'impressions', 'ctr', 'position']
 
+        # Si el DataFrame está vacío, retornar DataFrame con esquema correcto y valores 0
+        if df.is_empty():
+            schema = {group_by: []}
+            if 'clicks' in metrics:
+                schema.update({
+                    'sum_clicks': [],
+                    'avg_clicks': [],
+                    'median_clicks': [],
+                    'std_clicks': [],
+                    'count_clicks': []
+                })
+            if 'impressions' in metrics:
+                schema['sum_impressions'] = []
+            if 'ctr' in metrics:
+                schema['avg_ctr'] = []
+            if 'position' in metrics:
+                schema.update({
+                    'avg_position': [],
+                    'median_position': [],
+                    'std_position': []
+                })
+            return pl.DataFrame(schema)
+
         agg_exprs = []
 
         if 'clicks' in metrics:
@@ -102,16 +125,25 @@ class MetricsCalculator:
             agg_exprs.append(pl.col('impressions').sum().alias('sum_impressions'))
 
         if 'ctr' in metrics:
-            agg_exprs.append(pl.col('ctr').mean().round(2).alias('avg_ctr'))
+            # CTR ponderado por impresiones: sum(ctr * impressions) / sum(impressions)
+            agg_exprs.append(
+                ((pl.col('ctr') * pl.col(weight_col)).sum() / pl.col(weight_col).sum())
+                .fill_nan(0.0).round(2).alias('avg_ctr')
+            )
         
         if 'position' in metrics:
+            # Position ponderado por impresiones: sum(position * impressions) / sum(impressions)
             agg_exprs.extend([
-                pl.col('position').mean().round(2).alias('avg_position'),
+                ((pl.col('position') * pl.col(weight_col)).sum() / pl.col(weight_col).sum())
+                .fill_nan(0.0).round(2).alias('avg_position'),
                 pl.col('position').median().round(2).alias('median_position'),
                 pl.col('position').std().alias('std_position')
             ])
 
         result = df.group_by(group_by).agg(agg_exprs)
+
+        if result.is_empty():
+            return result
 
         if sort_by and sort_by in result.columns:
             result = result.sort(sort_by, descending=True)
@@ -179,6 +211,16 @@ class MetricsCalculator:
         if metrics is None:
             metrics = ['clicks', 'impressions']
 
+        # Si ambos DataFrames están vacíos, retornar DataFrame vacío con esquema correcto
+        if df1.is_empty() and df2.is_empty():
+            schema = {group_by: []}
+            for m in metrics:
+                schema[f'{m}_p1'] = []
+                schema[f'{m}_p2'] = []
+                schema[f'{m}_var_abs'] = []
+                schema[f'{m}_var_pct'] = []
+            return pl.DataFrame(schema)
+
         agg1 = df1.group_by(group_by).agg([
             pl.col(m).sum().alias(f'{m}_p1') for m in metrics
         ])
@@ -197,6 +239,9 @@ class MetricsCalculator:
                     pl.col(f'{m}_p1').replace(0, 1).replace(0, 1) * 100
                 ).alias(f'{m}_var_pct')
             ])
+
+        if merged.is_empty():
+            return merged
 
         if sort_by and sort_by in merged.columns:
             merged = merged.sort(sort_by, descending=True)
@@ -226,6 +271,16 @@ class MetricsCalculator:
         Returns:
             DataFrame con top variaciones
         """
+        # Si ambos DataFrames están vacíos, retornar DataFrame vacío con esquema correcto
+        if df1.is_empty() and df2.is_empty():
+            return pl.DataFrame({
+                group_by: [],
+                f'{metric}_p1': [],
+                f'{metric}_p2': [],
+                'variacion': [],
+                'variacion_abs': []
+            })
+
         agg1 = df1.group_by(group_by).agg(
             pl.col(metric).sum().alias(f'{metric}_p1')
         )
@@ -240,6 +295,9 @@ class MetricsCalculator:
             (pl.col(f'{metric}_p2') - pl.col(f'{metric}_p1')).alias('variacion'),
             (pl.col(f'{metric}_p2') - pl.col(f'{metric}_p1')).abs().alias('variacion_abs')
         ])
+        
+        if merged.is_empty():
+            return merged
         
         return merged.sort('variacion_abs', descending=True).head(n)
     
@@ -259,6 +317,20 @@ class MetricsCalculator:
         Returns:
             Dict con distribución
         """
+        # Si el DataFrame está vacío, retornar valores 0 y DataFrame vacío
+        if df.is_empty():
+            empty_dist = pl.DataFrame({
+                col: [],
+                'total': [],
+                'count': [],
+                'share_pct': []
+            })
+            return {
+                'total': 0,
+                'distribution': empty_dist,
+                'categories': 0
+            }
+
         total = df.select(pl.col(value_col).sum()).to_numpy().item()
         
         dist = df.group_by(col).agg(
@@ -269,6 +341,13 @@ class MetricsCalculator:
         dist = dist.with_columns(
             (pl.col('total') / total * 100).alias('share_pct')
         )
+        
+        if dist.is_empty():
+            return {
+                'total': total,
+                'distribution': dist,
+                'categories': 0
+            }
         
         return {
             'total': total,
