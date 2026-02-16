@@ -113,3 +113,180 @@ analyzer.print_summary()
 | `calculate_url_optimization()` | Optimización URLs |
 | `calculate_top10_coverage(max_queries=100, max_urls_per_query=10, sort_by='clicks')` | % keywords en top 10 + DataFrame limitado con queries, URLs y position |
 | `detect_cannibalization(max_queries=100, max_urls_per_query=10, sort_by='impressions')` | Detecta canibalización + DataFrame con position, ordenado por impressions/clicks |
+
+---
+
+## Ejemplo Completo de Uso
+
+```python
+"""
+Script de análisis SEO completo - seo_analyzer v1.4.3
+Compatible con Google Colab y Jupyter Notebooks
+"""
+
+# ==============================================================================
+# 1. IMPORTS Y CONFIGURACIÓN
+# ==============================================================================
+import polars as pl
+from seo_analyzer import (
+    SEOAnalyzer, 
+    RecoveryTargets, 
+    RecoveryAnalyzer,
+    mostrar_df  # NUEVO en v1.4.3
+)
+from IPython.display import display
+
+# Configurar Polars
+pl.Config.set_tbl_rows(50)
+pl.Config.set_tbl_cols(-1)
+
+# ==============================================================================
+# 2. CARGA DE DATOS
+# ==============================================================================
+df = pl.read_csv('datos-gsc.csv')
+
+# ==============================================================================
+# 3. CONFIGURACIÓN
+# ==============================================================================
+grupos = {
+    "Marca": ['transbank', 'tbk'],
+    "Productos": ['webpay', 'onepay']
+}
+
+recovery_targets = RecoveryTargets(
+    target_trafico=50000,
+    target_top10_coverage=40.0,
+    target_cannibalization=15.0
+)
+
+analyzer = SEOAnalyzer(df)
+analyzer.configure(
+    cliente='MiCliente',
+    periodo_base=('2025-01-01', '2025-01-31'),
+    periodo_actual=('2025-02-01', '2025-02-28'),
+    grupos=grupos,
+    brand_keywords=['transbank', 'tbk'],
+    kpi_keywords=['reserva', 'hora'],
+    recovery_targets=recovery_targets
+)
+
+# ==============================================================================
+# 4. NUEVO: mostrar_df() (v1.4.3)
+# ==============================================================================
+# Mostrar en CSV (para copiar a Sheets)
+mostrar_df(df.head(10), formato='csv')
+
+# Mostrar como tabla (para Colab)
+mostrar_df(df.head(10), formato='display')
+
+# ==============================================================================
+# 5. NUEVO: resumen_kw() (v1.4.3)
+# ==============================================================================
+# Seguimiento de keyword específica
+evolucion = analyzer.resumen_kw(
+    kw='transbank',
+    periodo='month',  # 'month' o 'day'
+    exact_match=True
+)
+
+# Seguimiento de TODO el tráfico
+total = analyzer.resumen_kw(kw=None, periodo='month')
+
+# Seguimiento por URL
+urls = analyzer.resumen_kw(col='page', kw='/home', periodo='month')
+
+# ==============================================================================
+# 6. ANÁLISIS BÁSICO
+# ==============================================================================
+# Totales por período
+totales = analyzer.analyze_totals('actual')
+
+# Top queries (con límites)
+queries = analyzer.analyze_queries('actual', n=50, sort_by='sum_clicks')
+
+# Top URLs (con límites)
+urls = analyzer.analyze_urls('actual', n=50, sort_by='sum_impressions')
+
+# Queries en TOP 10 (position <= 10)
+top10 = analyzer.get_top10_queries('actual', n=100, sort_by='clicks')
+
+# ==============================================================================
+# 7. ANÁLISIS POR CATEGORÍAS
+# ==============================================================================
+# Por grupos definidos
+grupos = analyzer.analyze_grupos('actual')
+
+# Brand vs Non-brand
+brand = analyzer.analyze_brand_vs_nonbrand('actual')
+
+# KPIs
+kpis = analyzer.analyze_kpis('actual')
+
+# ==============================================================================
+# 8. COMPARACIONES
+# ==============================================================================
+# Comparar períodos
+comparacion = analyzer.compare_periods()
+
+# Top variaciones
+variaciones = analyzer.top_queries_variation(25)
+
+# ==============================================================================
+# 9. MÉTODOS AVANZADOS
+# ==============================================================================
+base = analyzer.get_periodo('base')
+actual = analyzer.get_periodo('actual')
+
+# Subsets y resúmenes
+subsets = analyzer.generate_subsets(actual)
+summary = analyzer.summarize_dataframes(subsets)
+
+# Comparación de resúmenes
+comparison = analyzer.compare_summaries(
+    analyzer.summarize_dataframes(analyzer.generate_subsets(base)),
+    summary
+)
+
+# Distribución por categoría
+dist_cat = analyzer.traffic_distribution_by_keyword_category(actual)
+
+# Distribución por subdominio
+dist_sub = analyzer.traffic_distribution_by_subdomain(actual)
+
+# ==============================================================================
+# 10. RECOVERY ANALYZER
+# ==============================================================================
+recovery = RecoveryAnalyzer(df, analyzer.config, recovery_targets)
+recovery.apply_classifications()
+
+# Métricas de recovery
+trafico = recovery.calculate_traffic_recovery()
+trans = recovery.calculate_transactional_impressions()
+nb = recovery.calculate_nonbranded_coverage()
+urls = recovery.calculate_url_optimization()
+
+# TOP 10 Coverage (con límites)
+top10_cov = recovery.calculate_top10_coverage(
+    max_queries=100,
+    max_urls_per_query=10,
+    sort_by='clicks'
+)
+mostrar_df(top10_cov['top10_df'], formato='csv')
+
+# Canibalización (con límites y position)
+cann = recovery.detect_cannibalization(
+    max_queries=100,
+    max_urls_per_query=10,
+    sort_by='impressions'
+)
+mostrar_df(cann['cannibal_df'], formato='csv')
+
+# Dashboard completo
+recovery.print_dashboard()
+
+# ==============================================================================
+# 11. ANÁLISIS COMPLETO
+# ==============================================================================
+results = analyzer.analyze_all()
+analyzer.print_summary()
+```
