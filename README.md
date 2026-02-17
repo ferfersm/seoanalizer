@@ -61,7 +61,10 @@ top10 = analyzer.get_top10_queries('actual', n=100, sort_by='impressions')
 ```
 
 ### Métricas Redondeadas
-Todas las métricas de **CTR** y **position** se redondean automáticamente a **2 decimales** para mejor legibilidad.
+Todas las métricas decimales se redondean automáticamente a **2 decimales** para mejor legibilidad:
+- **CTR**: avg_ctr, ctr
+- **Position**: avg_position, median_position, std_position
+- **Clicks**: avg_clicks, median_clicks, std_clicks
 
 ### Normalización de Tipos de Datos
 El módulo normaliza automáticamente los tipos de datos:
@@ -210,6 +213,11 @@ urls = analyzer.resumen_kw(col='page', kw='/login', periodo='month')
 - `variacion_*`: Diferencias vs período anterior (absolutas y %)
 
 ## Changelog
+
+### v1.4.4
+- **Fix**: Todas las métricas decimales ahora usan Float64 con round(2)
+- **Fix**: Todas las métricas enteras ahora usan Int64 (clicks, impressions, count)
+- **Fix**: Redondeo consistente en avg_clicks, median_clicks, std_clicks, median_position, std_position
 
 ### v1.4.3
 - **Fix crítico**: Manejo de DataFrames vacíos en todos los métodos

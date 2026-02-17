@@ -114,15 +114,15 @@ class MetricsCalculator:
 
         if 'clicks' in metrics:
             agg_exprs.extend([
-                pl.col('clicks').sum().alias('sum_clicks'),
-                pl.col('clicks').mean().alias('avg_clicks'),
-                pl.col('clicks').median().alias('median_clicks'),
-                pl.col('clicks').std().alias('std_clicks'),
-                pl.col('clicks').count().alias('count_clicks')
+                pl.col('clicks').sum().cast(pl.Int64).alias('sum_clicks'),
+                pl.col('clicks').mean().round(2).alias('avg_clicks'),
+                pl.col('clicks').median().round(2).alias('median_clicks'),
+                pl.col('clicks').std().round(2).alias('std_clicks'),
+                pl.col('clicks').count().cast(pl.Int64).alias('count_clicks')
             ])
 
         if 'impressions' in metrics:
-            agg_exprs.append(pl.col('impressions').sum().alias('sum_impressions'))
+            agg_exprs.append(pl.col('impressions').sum().cast(pl.Int64).alias('sum_impressions'))
 
         if 'ctr' in metrics:
             # CTR ponderado por impresiones: sum(ctr * impressions) / sum(impressions)
@@ -137,7 +137,7 @@ class MetricsCalculator:
                 ((pl.col('position') * pl.col(weight_col)).sum() / pl.col(weight_col).sum())
                 .fill_nan(0.0).round(2).alias('avg_position'),
                 pl.col('position').median().round(2).alias('median_position'),
-                pl.col('position').std().alias('std_position')
+                pl.col('position').std().round(2).alias('std_position')
             ])
 
         result = df.group_by(group_by).agg(agg_exprs)
@@ -222,11 +222,11 @@ class MetricsCalculator:
             return pl.DataFrame(schema)
 
         agg1 = df1.group_by(group_by).agg([
-            pl.col(m).sum().alias(f'{m}_p1') for m in metrics
+            pl.col(m).sum().cast(pl.Int64).alias(f'{m}_p1') for m in metrics
         ])
 
         agg2 = df2.group_by(group_by).agg([
-            pl.col(m).sum().alias(f'{m}_p2') for m in metrics
+            pl.col(m).sum().cast(pl.Int64).alias(f'{m}_p2') for m in metrics
         ])
 
         merged = agg1.join(agg2, on=group_by, how='full').fill_null(0)
@@ -282,11 +282,11 @@ class MetricsCalculator:
             })
 
         agg1 = df1.group_by(group_by).agg(
-            pl.col(metric).sum().alias(f'{metric}_p1')
+            pl.col(metric).sum().cast(pl.Int64).alias(f'{metric}_p1')
         )
         
         agg2 = df2.group_by(group_by).agg(
-            pl.col(metric).sum().alias(f'{metric}_p2')
+            pl.col(metric).sum().cast(pl.Int64).alias(f'{metric}_p2')
         )
         
         merged = agg1.join(agg2, on=group_by, how='full').fill_null(0)
@@ -334,8 +334,8 @@ class MetricsCalculator:
         total = df.select(pl.col(value_col).sum()).to_numpy().item()
         
         dist = df.group_by(col).agg(
-            pl.col(value_col).sum().alias('total'),
-            pl.col(value_col).count().alias('count')
+            pl.col(value_col).sum().cast(pl.Int64).alias('total'),
+            pl.col(value_col).count().cast(pl.Int64).alias('count')
         )
         
         dist = dist.with_columns(

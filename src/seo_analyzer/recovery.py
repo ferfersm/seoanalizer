@@ -255,8 +255,8 @@ class RecoveryAnalyzer:
         
         # Agrupar por query con métricas agregadas
         top10_by_query = top10.group_by('query').agg([
-            pl.col('clicks').sum().alias('total_clicks'),
-            pl.col('impressions').sum().alias('total_impressions'),
+            pl.col('clicks').sum().cast(pl.Int64).alias('total_clicks'),
+            pl.col('impressions').sum().cast(pl.Int64).alias('total_impressions'),
             pl.col('position').mean().round(2).alias('avg_position'),
             pl.col('page').alias('all_urls')
         ])
@@ -377,9 +377,9 @@ class RecoveryAnalyzer:
         cannibal = (
             top20.group_by('query')
             .agg([
-                pl.col('page').n_unique().alias('url_count'),
-                pl.col('clicks').sum().alias('total_clicks'),
-                pl.col('impressions').sum().alias('total_impressions'),
+                pl.col('page').n_unique().cast(pl.Int64).alias('url_count'),
+                pl.col('clicks').sum().cast(pl.Int64).alias('total_clicks'),
+                pl.col('impressions').sum().cast(pl.Int64).alias('total_impressions'),
                 pl.col('position').mean().round(2).alias('avg_position'),
                 pl.col('page').alias('all_urls')
             ])

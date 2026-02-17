@@ -162,11 +162,11 @@ class ComparisonAnalyzer:
             })
         
         agg1 = df1.group_by(col_query).agg(
-            pl.col(metric).sum().alias(f'{metric}_p1')
+            pl.col(metric).sum().cast(pl.Int64).alias(f'{metric}_p1')
         )
         
         agg2 = df2.group_by(col_query).agg(
-            pl.col(metric).sum().alias(f'{metric}_p2')
+            pl.col(metric).sum().cast(pl.Int64).alias(f'{metric}_p2')
         )
         
         merged = agg1.join(agg2, on=col_query, how='full').fill_null(0)

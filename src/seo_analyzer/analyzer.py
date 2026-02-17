@@ -262,20 +262,20 @@ class SEOAnalyzer:
             })
 
         result = df.group_by(col_query).agg([
-            pl.col('clicks').sum().alias('sum_clicks'),
-            pl.col('clicks').mean().alias('avg_clicks'),
-            pl.col('clicks').median().alias('median_clicks'),
-            pl.col('clicks').std().alias('std_clicks'),
-            pl.col('impressions').sum().alias('sum_impressions'),
+            pl.col('clicks').sum().cast(pl.Int64).alias('sum_clicks'),
+            pl.col('clicks').mean().round(2).alias('avg_clicks'),
+            pl.col('clicks').median().round(2).alias('median_clicks'),
+            pl.col('clicks').std().round(2).alias('std_clicks'),
+            pl.col('impressions').sum().cast(pl.Int64).alias('sum_impressions'),
             # CTR ponderado por impresiones: (ctr * impressions) / sum(impressions)
             ((pl.col('ctr') * pl.col('impressions')).sum() / pl.col('impressions').sum())
             .fill_nan(0.0).round(2).alias('avg_ctr'),
             # Position ponderado por impresiones: (position * impressions) / sum(impressions)
             ((pl.col('position') * pl.col('impressions')).sum() / pl.col('impressions').sum())
             .fill_nan(0.0).round(2).alias('avg_position'),
-            pl.col('position').median().alias('median_position'),
-            pl.col('position').std().alias('std_position'),
-            pl.col('clicks').count().alias('count')
+            pl.col('position').median().round(2).alias('median_position'),
+            pl.col('position').std().round(2).alias('std_position'),
+            pl.col('clicks').count().cast(pl.Int64).alias('count')
         ])
 
         if result.is_empty():
@@ -321,8 +321,8 @@ class SEOAnalyzer:
         df_filtered = df.filter(pl.col('position') <= 10)
 
         result = df_filtered.group_by(col_query).agg([
-            pl.col('clicks').sum().alias('clicks'),
-            pl.col('impressions').sum().alias('impressions'),
+            pl.col('clicks').sum().cast(pl.Int64).alias('clicks'),
+            pl.col('impressions').sum().cast(pl.Int64).alias('impressions'),
             # CTR ponderado por impresiones
             ((pl.col('ctr') * pl.col('impressions')).sum() / pl.col('impressions').sum())
             .fill_nan(0.0).round(2).alias('ctr'),
@@ -377,16 +377,16 @@ class SEOAnalyzer:
             })
 
         result = df.group_by(col_page).agg([
-            pl.col('clicks').sum().alias('sum_clicks'),
-            pl.col('clicks').mean().alias('avg_clicks'),
-            pl.col('impressions').sum().alias('sum_impressions'),
+            pl.col('clicks').sum().cast(pl.Int64).alias('sum_clicks'),
+            pl.col('clicks').mean().round(2).alias('avg_clicks'),
+            pl.col('impressions').sum().cast(pl.Int64).alias('sum_impressions'),
             # CTR ponderado por impresiones
             ((pl.col('ctr') * pl.col('impressions')).sum() / pl.col('impressions').sum())
             .fill_nan(0.0).round(2).alias('avg_ctr'),
             # Position ponderado por impresiones
             ((pl.col('position') * pl.col('impressions')).sum() / pl.col('impressions').sum())
             .fill_nan(0.0).round(2).alias('avg_position'),
-            pl.col('clicks').count().alias('count')
+            pl.col('clicks').count().cast(pl.Int64).alias('count')
         ])
 
         if result.is_empty():
@@ -611,18 +611,18 @@ class SEOAnalyzer:
         col_query = self.config.columnas.get('query', 'query')
         
         agg_base = df_base.group_by(col_query).agg(
-            pl.col('clicks').sum().alias('clicks_base')
+            pl.col('clicks').sum().cast(pl.Int64).alias('clicks_base')
         )
         
         agg_actual = df_actual.group_by(col_query).agg(
-            pl.col('clicks').sum().alias('clicks_actual')
+            pl.col('clicks').sum().cast(pl.Int64).alias('clicks_actual')
         )
         
         merged = agg_base.join(agg_actual, on=col_query, how='full').fill_null(0)
         
         merged = merged.with_columns([
-            (pl.col('clicks_actual') - pl.col('clicks_base')).alias('variacion'),
-            (pl.col('clicks_actual') - pl.col('clicks_base')).abs().alias('variacion_abs')
+            (pl.col('clicks_actual') - pl.col('clicks_base')).cast(pl.Int64).alias('variacion'),
+            (pl.col('clicks_actual') - pl.col('clicks_base')).abs().cast(pl.Int64).alias('variacion_abs')
         ])
         
         return merged.sort('variacion_abs', descending=True).head(n)
