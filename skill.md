@@ -5,7 +5,7 @@ license: MIT
 compatibility: Python 3.11+, polars
 metadata:
   author: SEO Technical Team
-  version: "1.4.3"
+  version: "1.4.4"
 ---
 
 # seo_analyzer Skill
@@ -75,11 +75,16 @@ analyzer.print_summary()
 - Todas las métricas de **CTR** y **position** se redondean automáticamente a **2 decimales**
 - Esto asegura consistencia en los outputs y facilita la exportación a Sheets
 
-## Métodos Disponibles (v1.2)
+## Métodos Disponibles (v1.4.4)
 
 ### SEOAnalyzer
 | Método | Descripción |
 |--------|-------------|
+| `from_csv(path)` | Carga datos desde CSV (classmethod) |
+| `from_parquet(path)` | Carga datos desde Parquet (classmethod) |
+| `configure(...)` | Configura períodos, grupos, brand/KPIs |
+| `filter_by_date(start, end)` | Filtra DataFrame por rango de fechas |
+| `get_periodo('base' \| 'actual')` | Obtiene datos de un período configurado |
 | `analyze_queries(periodo, n=100, sort_by='sum_clicks')` | Análisis agregado por query (limitado) |
 | `get_top10_queries(periodo, n=100, sort_by='clicks')` | Queries con position <= 10 (limitado) |
 | `analyze_urls(periodo, n=100, sort_by='sum_clicks')` | Análisis agregado por URL (limitado) |
@@ -89,6 +94,8 @@ analyzer.print_summary()
 | `analyze_kpis(periodo)` | Análisis de keywords KPIs |
 | `compare_periods()` | Compara período base vs actual |
 | `top_queries_variation(n)` | Top N queries con mayor variación |
+| `analyze_all()` | Ejecuta análisis completo |
+| `print_summary()` | Imprime resumen ejecutivo en consola |
 | `generate_subsets(df)` | Genera subconjuntos por categorías |
 | `summarize_dataframes(dfs)` | Resume DataFrames con métricas |
 | `compare_summaries(df1, df2)` | Compara resúmenes entre períodos |
@@ -104,15 +111,40 @@ analyzer.print_summary()
 |---------|-------------|
 | `mostrar_df(df, formato)` | Visualización/exportación de DataFrames (v1.4.3) |
 
+### ComparisonAnalyzer
+| Método | Descripción |
+|--------|-------------|
+| `compare_totals(p1, p2)` | Compara totales entre dos períodos |
+| `compare_by_group(p1, p2, col)` | Compara por grupo entre períodos |
+| `compare_brand_nonbrand(p1, p2)` | Compara brand vs non-brand |
+| `top_variation_queries(p1, p2, n)` | Top queries con mayor variación |
+| `full_comparison(p1, p2)` | Comparación completa de períodos |
+
 ### RecoveryAnalyzer
 | Método | Descripción |
 |--------|-------------|
+| `apply_classifications()` | Aplica clasificaciones de grupo, brand, KPI |
 | `calculate_traffic_recovery()` | Recovery de tráfico |
 | `calculate_transactional_impressions()` | Impresiones transaccionales |
 | `calculate_nonbranded_coverage()` | Cobertura non-branded |
 | `calculate_url_optimization()` | Optimización URLs |
-| `calculate_top10_coverage(max_queries=100, max_urls_per_query=10, sort_by='clicks')` | % keywords en top 10 + DataFrame limitado con queries, URLs y position |
-| `detect_cannibalization(max_queries=100, max_urls_per_query=10, sort_by='impressions')` | Detecta canibalización + DataFrame con position, ordenado por impressions/clicks |
+| `calculate_top10_coverage(max_queries=100, max_urls_per_query=10, sort_by='clicks')` | % keywords en top 10 + DataFrame limitado |
+| `detect_cannibalization(max_queries=100, max_urls_per_query=10, sort_by='impressions')` | Detecta canibalización + DataFrame |
+| `analyze()` | Análisis completo de recovery |
+| `print_dashboard()` | Imprime dashboard de recovery |
+
+### MetricsCalculator (Estático)
+| Método | Descripción |
+|--------|-------------|
+| `weighted_avg(series, weights)` | Promedio ponderado |
+| `std(series)` | Desviación estándar |
+| `median(series)` | Mediana |
+| `percentile(series, q)` | Percentil |
+| `summary_by_group(df, group_by, metrics, n, sort_by)` | Resumen por grupo con métricas avanzadas |
+| `summary_totals(df, metrics)` | Resumen de totales |
+| `compare_periods(df1, df2, group_by, metrics, n, sort_by)` | Compara dos períodos |
+| `top_n_by_variation(df1, df2, group_by, metric, n)` | Top N por variación |
+| `distribution_summary(df, col, value_col)` | Distribución por categoría |
 
 ---
 
@@ -120,7 +152,7 @@ analyzer.print_summary()
 
 ```python
 """
-Script de análisis SEO completo - seo_analyzer v1.4.3
+Script de análisis SEO completo - seo_analyzer v1.4.4
 Compatible con Google Colab y Jupyter Notebooks
 """
 
