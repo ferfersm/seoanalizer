@@ -454,7 +454,11 @@ class SEOAnalyzer:
         }
     
     def analyze_grupos(self, periodo: str = 'actual') -> Dict:
-        """Análisis por grupos de keywords."""
+        """Análisis por grupos de keywords.
+        
+        Cada query puede pertenecer a múltiples grupos simultáneamente
+        si contiene keywords de varios grupos.
+        """
         df = self.get_periodo(periodo)
         
         if df.is_empty():
@@ -468,16 +472,31 @@ class SEOAnalyzer:
             return {'status': 'ok', 'grupos': {}}
         
         resultados = {'status': 'ok', 'grupos': {}}
+        col_query = self.config.columnas.get('query', 'query')
         
-        for grupo in self.config.grupos.keys():
-            df_grupo = df.filter(pl.col('grupo') == grupo)
+        # Calcular total de clics para calcular share
+        total_clicks = safe_sum(df, 'clicks')
+        
+        for grupo, keywords in self.config.grupos.items():
+            # Compilar patrón para este grupo específico
+            pattern = compile_pattern([normalizar_texto(kw) for kw in keywords])
+            
+            # Filtrar directamente en la query - permite múltiples grupos por query
+            df_grupo = df.filter(
+                pl.col(col_query).str.to_lowercase().str.contains(pattern)
+            )
+            
+            grupo_clicks = safe_sum(df_grupo, 'clicks')
+            share = (grupo_clicks / total_clicks * 100) if total_clicks else 0.0
             
             resultados['grupos'][grupo] = {
-                'clicks': safe_sum(df_grupo, 'clicks'),
+                'clicks': grupo_clicks,
                 'impressions': safe_sum(df_grupo, 'impressions'),
                 'ctr': round(safe_mean(df_grupo, 'ctr'), 2),
                 'position': round(safe_mean(df_grupo, 'position'), 2),
-                'queries': safe_n_unique(df_grupo, 'query')
+                'queries': safe_n_unique(df_grupo, col_query),
+                'pages': safe_n_unique(df_grupo, self.config.columnas.get('page', 'page')),
+                'share': round(share, 2)
             }
         
         return resultados
@@ -729,11 +748,10 @@ class SEOAnalyzer:
         subsets['non_branded'] = non_branded
         
         if self.config.grupos:
-            for grupo in self.config.grupos.keys():
-                if 'grupo' in df.columns:
-                    df_grupo = df.filter(pl.col('grupo') == grupo)
-                else:
-                    df_grupo = pl.DataFrame()
+            for grupo, keywords in self.config.grupos.items():
+                # Filtrar directamente por keywords - permite múltiples grupos por query
+                pattern = compile_pattern([normalizar_texto(kw) for kw in keywords])
+                df_grupo = df.filter(pl.col(col_query).str.to_lowercase().str.contains(pattern))
                 subsets[f'solo {grupo}'] = df_grupo
         
         if self.config.kpi_keywords:
